@@ -143,7 +143,10 @@ impl LoopEngine {
                     }
                     event_bus.publish(OuraEvent::LoopStopped {
                         loop_id: loop_id.clone(),
-                        iterations: state_guard.as_ref().map(|s| s.current_iteration).unwrap_or(0),
+                        iterations: state_guard
+                            .as_ref()
+                            .map(|s| s.current_iteration)
+                            .unwrap_or(0),
                         timestamp: Utc::now().to_rfc3339(),
                     });
                     break;
@@ -206,8 +209,8 @@ impl LoopEngine {
                 score = score.clamp(0.0, 100.0);
 
                 let has_feedback = !feedback_entries.is_empty();
-                let converged =
-                    has_feedback && (score >= threshold || (error_count == 0.0 && warning_count == 0.0));
+                let converged = has_feedback
+                    && (score >= threshold || (error_count == 0.0 && warning_count == 0.0));
 
                 let status = if converged {
                     "converged"
@@ -292,9 +295,7 @@ impl LoopEngine {
             .state
             .lock()
             .map_err(|_| OuraError::Internal("Lock poisoned".to_string()))?;
-        let state = state_guard
-            .as_mut()
-            .ok_or(OuraError::NoActiveLoop)?;
+        let state = state_guard.as_mut().ok_or(OuraError::NoActiveLoop)?;
 
         if state.status != "running" {
             return Err(OuraError::LoopNotRunning(state.status.clone()));
@@ -318,8 +319,9 @@ impl LoopEngine {
         score = score.clamp(0.0, 100.0);
 
         let has_feedback = !feedback_entries.is_empty();
-        let converged =
-            has_feedback && (score >= *self.convergence_threshold.lock().unwrap() || (error_count == 0.0 && warning_count == 0.0));
+        let converged = has_feedback
+            && (score >= *self.convergence_threshold.lock().unwrap()
+                || (error_count == 0.0 && warning_count == 0.0));
 
         let max_iter = *self.max_iterations.lock().unwrap();
 

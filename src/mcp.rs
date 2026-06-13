@@ -1409,7 +1409,12 @@ impl CleanupContext {
         self.walk_inner(path, depth, &mut visited);
     }
 
-    fn walk_inner(&mut self, path: &Path, depth: usize, visited: &mut std::collections::HashSet<u64>) {
+    fn walk_inner(
+        &mut self,
+        path: &Path,
+        depth: usize,
+        visited: &mut std::collections::HashSet<u64>,
+    ) {
         if depth > self.max_depth || !path.is_dir() {
             return;
         }
@@ -1440,7 +1445,8 @@ impl CleanupContext {
                     if self.dir_patterns.contains(&name.as_str()) {
                         let size = dir_size(&p).unwrap_or(0);
                         self.total_size += size;
-                        self.candidates.push((p.to_string_lossy().to_string(), format!("{} dir", name)));
+                        self.candidates
+                            .push((p.to_string_lossy().to_string(), format!("{} dir", name)));
                     } else {
                         self.walk_inner(&p, depth + 1, visited);
                     }
@@ -1457,7 +1463,8 @@ impl CleanupContext {
                         self.total_size += size;
                         let reason = if let Ok(meta) = p.metadata() {
                             if let Ok(modified) = meta.modified() {
-                                if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
+                                if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH)
+                                {
                                     let age_secs = self.now.saturating_sub(duration.as_secs());
                                     if age_secs > self.max_age {
                                         format!("old ({} days)", age_secs / 86400)
@@ -1473,7 +1480,8 @@ impl CleanupContext {
                         } else {
                             "temp file".into()
                         };
-                        self.candidates.push((p.to_string_lossy().to_string(), reason));
+                        self.candidates
+                            .push((p.to_string_lossy().to_string(), reason));
                     }
                 }
             }

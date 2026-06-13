@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::types::FeedbackEntry;
+use async_trait::async_trait;
 
 #[async_trait]
 pub trait CommandRunner: Send + Sync {

@@ -4,7 +4,14 @@ use std::fs;
 
 pub struct SecurityAuditor;
 
-type DangerousPattern = (&'static str, &'static str, &'static str, &'static str, &'static str, &'static [&'static str]);
+type DangerousPattern = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static [&'static str],
+);
 
 const DANGEROUS_PATTERNS: &[DangerousPattern] = &[
     (
@@ -231,7 +238,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let file = temp.path().join("clean.js");
         fs::write(&file, "const x = 1;").unwrap();
-        
+
         let auditor = SecurityAuditor::new();
         let findings = auditor.audit(&[file.to_string_lossy().to_string()]);
         assert!(findings.is_empty());
@@ -242,7 +249,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let file = temp.path().join("test.js");
         fs::write(&file, "db.execute('SELECT * FROM users')").unwrap();
-        
+
         let auditor = SecurityAuditor::new();
         let findings = auditor.audit(&[file.to_string_lossy().to_string()]);
         assert!(!findings.is_empty());
@@ -254,7 +261,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let file = temp.path().join("test.js");
         fs::write(&file, "element.innerHTML = userInput").unwrap();
-        
+
         let auditor = SecurityAuditor::new();
         let findings = auditor.audit(&[file.to_string_lossy().to_string()]);
         assert!(!findings.is_empty());
@@ -279,7 +286,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let file = temp.path().join("clean.js");
         fs::write(&file, "const x = 1;").unwrap();
-        
+
         let engine = RefactorEngine::new();
         let (issues, _) = engine.analyze(&file.to_string_lossy());
         assert!(issues.is_empty());
@@ -290,7 +297,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let file = temp.path().join("test.js");
         fs::write(&file, "// TODO: fix this later").unwrap();
-        
+
         let engine = RefactorEngine::new();
         let (issues, suggestions) = engine.analyze(&file.to_string_lossy());
         assert!(!issues.is_empty());
@@ -304,7 +311,7 @@ mod tests {
         let file = temp.path().join("long.js");
         let content = "const x = 1;\n".repeat(600);
         fs::write(&file, content).unwrap();
-        
+
         let engine = RefactorEngine::new();
         let (issues, _) = engine.analyze(&file.to_string_lossy());
         assert!(issues.iter().any(|i| i.contains("File too long")));

@@ -1,6 +1,6 @@
-use async_trait::async_trait;
 use crate::traits::{CommandRunner, FeedbackCollector};
 use crate::types::FeedbackEntry;
+use async_trait::async_trait;
 
 pub struct TestFeedbackCollector {
     command_runner: Box<dyn CommandRunner>,
@@ -125,7 +125,7 @@ impl FeedbackCollector for ProfileFeedbackCollector {
         let mut entries = vec![];
         let cwd = std::env::current_dir().unwrap_or_default();
         let profile_result = crate::profile::ProjectProfile::detect(&cwd);
-        
+
         let dep_type = if profile_result.dependency_count > 50 {
             "error"
         } else if profile_result.dependency_count > 20 {
@@ -133,7 +133,7 @@ impl FeedbackCollector for ProfileFeedbackCollector {
         } else {
             "info"
         };
-        
+
         entries.push(FeedbackEntry {
             source: "profile".into(),
             type_: dep_type.into(),

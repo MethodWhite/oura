@@ -269,22 +269,25 @@ mod tests {
         let config = Config::default();
         let toml_str = toml::to_string(&config).unwrap();
         assert!(!toml_str.is_empty());
-        
+
         let deserialized: Config = toml::from_str(&toml_str).unwrap();
-        assert_eq!(deserialized.loop_engine.max_iterations, config.loop_engine.max_iterations);
+        assert_eq!(
+            deserialized.loop_engine.max_iterations,
+            config.loop_engine.max_iterations
+        );
     }
 
     #[test]
     fn test_apply_env_overrides() {
         std::env::set_var("OURA_MAX_ITERATIONS", "50");
         std::env::set_var("OURA_CONVERGENCE_THRESHOLD", "95.0");
-        
+
         let config = Config::default();
         let config = Config::apply_env_overrides(config);
-        
+
         assert_eq!(config.loop_engine.max_iterations, 50);
         assert_eq!(config.loop_engine.convergence_threshold, 95.0);
-        
+
         std::env::remove_var("OURA_MAX_ITERATIONS");
         std::env::remove_var("OURA_CONVERGENCE_THRESHOLD");
     }

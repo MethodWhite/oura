@@ -740,8 +740,12 @@ mod tests {
     fn test_detect_rust_project() {
         let temp = TempDir::new().unwrap();
         let cargo_toml = temp.path().join("Cargo.toml");
-        fs::write(&cargo_toml, "[package]\nname = \"test\"\n[dependencies]\nserde = \"1.0\"").unwrap();
-        
+        fs::write(
+            &cargo_toml,
+            "[package]\nname = \"test\"\n[dependencies]\nserde = \"1.0\"",
+        )
+        .unwrap();
+
         let profile = ProjectProfile::detect(temp.path());
         assert_eq!(profile.ecosystem, "rust");
         assert_eq!(profile.dependency_count, 1);
@@ -752,7 +756,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let package_json = temp.path().join("package.json");
         fs::write(&package_json, r#"{"dependencies": {"express": "4.18.0"}}"#).unwrap();
-        
+
         let profile = ProjectProfile::detect(temp.path());
         assert_eq!(profile.ecosystem, "node");
         assert_eq!(profile.dependency_count, 1);
@@ -763,7 +767,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let cargo_toml = temp.path().join("Cargo.toml");
         fs::write(&cargo_toml, "[dependencies]\nbevy = \"0.12\"").unwrap();
-        
+
         let profile = ProjectProfile::detect(temp.path());
         assert!(profile.has_game_engine);
         assert!(profile.indicators.iter().any(|i| i.contains("game-engine")));
@@ -794,7 +798,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let cargo_toml = temp.path().join("Cargo.toml");
         fs::write(&cargo_toml, "[dependencies]\nserde = \"1.0\"\ntokio = \"1.0\"\n[dev-dependencies]\ntempfile = \"3.0\"").unwrap();
-        
+
         let count = count_cargo_deps(temp.path());
         assert_eq!(count, 3);
     }
@@ -803,8 +807,12 @@ mod tests {
     fn test_count_json_deps() {
         let temp = TempDir::new().unwrap();
         let package_json = temp.path().join("package.json");
-        fs::write(&package_json, r#"{"dependencies": {"express": "4.18.0"}, "devDependencies": {"jest": "29.0.0"}}"#).unwrap();
-        
+        fs::write(
+            &package_json,
+            r#"{"dependencies": {"express": "4.18.0"}, "devDependencies": {"jest": "29.0.0"}}"#,
+        )
+        .unwrap();
+
         let count = count_json_deps(temp.path(), "package.json");
         assert_eq!(count, 2);
     }
@@ -829,7 +837,7 @@ mod tests {
             has_enterprise_configs: false,
             dependency_count: 5,
         };
-        
+
         let summary = profile.summary();
         assert!(summary.contains("indie"));
         assert!(summary.contains("rust"));

@@ -116,22 +116,55 @@ fn format_event(event: &OuraEvent) -> String {
         OuraEvent::LoopStarted { loop_id, goal, .. } => {
             format!("Loop {} started: {}", loop_id, goal)
         }
-        OuraEvent::LoopStopped { loop_id, iterations, .. } => {
+        OuraEvent::LoopStopped {
+            loop_id,
+            iterations,
+            ..
+        } => {
             format!("Loop {} stopped after {} iterations", loop_id, iterations)
         }
-        OuraEvent::LoopCompleted { loop_id, iterations, final_score, .. } => {
-            format!("Loop {} completed: {} iterations, score {:.1}", loop_id, iterations, final_score)
+        OuraEvent::LoopCompleted {
+            loop_id,
+            iterations,
+            final_score,
+            ..
+        } => {
+            format!(
+                "Loop {} completed: {} iterations, score {:.1}",
+                loop_id, iterations, final_score
+            )
         }
-        OuraEvent::IterationStarted { loop_id, iteration, .. } => {
+        OuraEvent::IterationStarted {
+            loop_id, iteration, ..
+        } => {
             format!("Loop {} iteration {} started", loop_id, iteration)
         }
-        OuraEvent::IterationCompleted { loop_id, iteration, score, status, .. } => {
-            format!("Loop {} iteration {} completed: score {:.1}, status {}", loop_id, iteration, score, status)
+        OuraEvent::IterationCompleted {
+            loop_id,
+            iteration,
+            score,
+            status,
+            ..
+        } => {
+            format!(
+                "Loop {} iteration {} completed: score {:.1}, status {}",
+                loop_id, iteration, score, status
+            )
         }
-        OuraEvent::FeedbackCollected { loop_id, iteration, entry_count, .. } => {
-            format!("Loop {} iteration {} collected {} feedback entries", loop_id, iteration, entry_count)
+        OuraEvent::FeedbackCollected {
+            loop_id,
+            iteration,
+            entry_count,
+            ..
+        } => {
+            format!(
+                "Loop {} iteration {} collected {} feedback entries",
+                loop_id, iteration, entry_count
+            )
         }
-        OuraEvent::Error { loop_id, message, .. } => {
+        OuraEvent::Error {
+            loop_id, message, ..
+        } => {
             if let Some(id) = loop_id {
                 format!("Loop {} error: {}", id, message)
             } else {
