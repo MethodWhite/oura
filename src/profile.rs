@@ -46,54 +46,127 @@ impl ProjectProfile {
             ecosystem = "rust".to_string();
             dep_count = count_cargo_deps(root);
             if let Ok(content) = std::fs::read_to_string(root.join("Cargo.toml")) {
-                if content.contains("unreal") || content.contains("godot") || content.contains("bevy") || content.contains("amethyst") {
+                if content.contains("unreal")
+                    || content.contains("godot")
+                    || content.contains("bevy")
+                    || content.contains("amethyst")
+                {
                     has_game_engine = true;
                     indicators.push("game-engine: rust".to_string());
                 }
             }
         }
         if root.join("package.json").exists() {
-            ecosystem = if ecosystem == "unknown" { "node".to_string() } else { format!("{}+node", ecosystem) };
+            ecosystem = if ecosystem == "unknown" {
+                "node".to_string()
+            } else {
+                format!("{}+node", ecosystem)
+            };
             dep_count += count_json_deps(root, "package.json");
             if let Ok(content) = std::fs::read_to_string(root.join("package.json")) {
-                if content.contains("\"three\"") || content.contains("\"babylon\"") || content.contains("\"phaser\"") || content.contains("\"pixi.js\"") {
+                if content.contains("\"three\"")
+                    || content.contains("\"babylon\"")
+                    || content.contains("\"phaser\"")
+                    || content.contains("\"pixi.js\"")
+                {
                     has_game_engine = true;
                     indicators.push("game-engine: web".to_string());
                 }
             }
         }
         if root.join("pyproject.toml").exists() || root.join("requirements.txt").exists() {
-            ecosystem = if ecosystem == "unknown" { "python".to_string() } else { format!("{}+python", ecosystem) };
+            ecosystem = if ecosystem == "unknown" {
+                "python".to_string()
+            } else {
+                format!("{}+python", ecosystem)
+            };
         }
         if root.join("CMakeLists.txt").exists() {
-            ecosystem = if ecosystem == "unknown" { "cpp".to_string() } else { format!("{}+cpp", ecosystem) };
+            ecosystem = if ecosystem == "unknown" {
+                "cpp".to_string()
+            } else {
+                format!("{}+cpp", ecosystem)
+            };
         }
         if root.join("go.mod").exists() {
-            ecosystem = if ecosystem == "unknown" { "go".to_string() } else { format!("{}+go", ecosystem) };
+            ecosystem = if ecosystem == "unknown" {
+                "go".to_string()
+            } else {
+                format!("{}+go", ecosystem)
+            };
         }
 
         let enterprise_patterns = [
-            "saml", "ldap", "okta", "keycloak", "oauth2", "enterprise",
-            "single-sign-on", "sso", "active-directory", "adfs",
-            "compliance", "gdpr", "hipaa", "sox", "pci-dss",
-            "audit-log", "rbac", "abac", "tenant", "multi-tenant",
+            "saml",
+            "ldap",
+            "okta",
+            "keycloak",
+            "oauth2",
+            "enterprise",
+            "single-sign-on",
+            "sso",
+            "active-directory",
+            "adfs",
+            "compliance",
+            "gdpr",
+            "hipaa",
+            "sox",
+            "pci-dss",
+            "audit-log",
+            "rbac",
+            "abac",
+            "tenant",
+            "multi-tenant",
         ];
         let paid_tool_patterns = [
-            "unreal", "unity", "UnrealEngine", "UnityEngine",
-            "photosh", "adobe", "maya", "blender", " Substance ",
-            "houdini", "nuke", "fusion360", "autocad", "solidworks",
-            "matlab", "simulink", "ansys", "comsol",
-            "datadog", "newrelic", "sentry", "databricks", "snowflake",
+            "unreal",
+            "unity",
+            "UnrealEngine",
+            "UnityEngine",
+            "photosh",
+            "adobe",
+            "maya",
+            "blender",
+            " Substance ",
+            "houdini",
+            "nuke",
+            "fusion360",
+            "autocad",
+            "solidworks",
+            "matlab",
+            "simulink",
+            "ansys",
+            "comsol",
+            "datadog",
+            "newrelic",
+            "sentry",
+            "databricks",
+            "snowflake",
         ];
         let studio_patterns = [
-            "gamestudio", "game-studio", "entertainment", "interactive",
-            "arts", "creative", "media", "production",
+            "gamestudio",
+            "game-studio",
+            "entertainment",
+            "interactive",
+            "arts",
+            "creative",
+            "media",
+            "production",
         ];
 
         let config_files = [
-            ".saml", "SAML", "ldap", "keycloak.json", "okta.json",
-            "enterprise.json", "enterprise.yml", "corporate.json",
-            "license.key", "LICENSE.key", "unity.alf", "UnrealLicense",
+            ".saml",
+            "SAML",
+            "ldap",
+            "keycloak.json",
+            "okta.json",
+            "enterprise.json",
+            "enterprise.yml",
+            "corporate.json",
+            "license.key",
+            "LICENSE.key",
+            "unity.alf",
+            "UnrealLicense",
         ];
 
         for file in &config_files {
@@ -148,16 +221,17 @@ impl ProjectProfile {
             }
         }
 
-        let user_type = classify(
-            has_enterprise_configs,
-            has_paid_tools,
-            &indicators,
-        );
+        let user_type = classify(has_enterprise_configs, has_paid_tools, &indicators);
 
-        let confidence = if indicators.len() >= 3 { 0.9 }
-            else if indicators.len() >= 2 { 0.7 }
-            else if indicators.len() >= 1 { 0.5 }
-            else { 0.3 };
+        let confidence = if indicators.len() >= 3 {
+            0.9
+        } else if indicators.len() >= 2 {
+            0.7
+        } else if indicators.len() >= 1 {
+            0.5
+        } else {
+            0.3
+        };
 
         Self {
             user_type,
@@ -187,22 +261,199 @@ impl ProjectProfile {
 
 fn classify(enterprise: bool, paid_tools: bool, indicators: &[String]) -> ProfileType {
     let profile_rules: Vec<(&[&str], &str)> = vec![
-        (&["enterprise", "saml", "ldap", "okta", "keycloak", "active-directory", "compliance", "hipaa", "sox", "pci-dss", "rbac", "abac", "multi-tenant"], "enterprise"),
-        (&["gamestudio", "game-studio", "entertainment", "interactive", "production", "media", "creative", "arts", "film", "vfx"], "studio"),
-        (&["unreal", "unity", "godot", "bevy", "amethyst", "three.js", "babylon"], "game-dev"),
-        (&["photosh", "adobe", "maya", "blender", "substance", "houdini", "nuke", "fusion360", "autocad", "solidworks"], "3d-artist"),
-        (&["matlab", "simulink", "ansys", "comsol", "wolfram", "maple"], "research"),
-        (&["datadog", "newrelic", "databricks", "snowflake", "sentry", "elastic", "grafana"], "devops"),
-        (&["startup", "saas", "b2b", "b2c", "mobile", "ios", "android", "react-native", "flutter"], "startup"),
-        (&["education", "edtech", "course", "tutorial", "learning", "academy"], "education"),
-        (&["opensource", "open-source", "open_source", "oss", "mit", "apache-2.0", "gpl", "lgpl"], "open-source"),
-        (&["blockchain", "web3", "ethereum", "solana", "near", "cosmos", "crypto", "nft", "defi"], "blockchain"),
-        (&["ai", "ml", "deep-learning", "machine-learning", "neural", "llm", "gpt", "transformer", "pytorch", "tensorflow"], "ai-ml"),
-        (&["robotics", "ros", "automation", "industrial", "iot", "embedded"], "industrial"),
-        (&["government", "public-sector", "ministry", "federal", "state", "agency"], "government"),
-        (&["e-commerce", "ecommerce", "shopify", "woocommerce", "magento", "retail"], "ecommerce"),
-        (&["health", "healthcare", "medtech", "bio", "pharma", "clinical", "hospital"], "healthcare"),
-        (&["fintech", "banking", "finance", "payment", "insurance", "investment"], "fintech"),
+        (
+            &[
+                "enterprise",
+                "saml",
+                "ldap",
+                "okta",
+                "keycloak",
+                "active-directory",
+                "compliance",
+                "hipaa",
+                "sox",
+                "pci-dss",
+                "rbac",
+                "abac",
+                "multi-tenant",
+            ],
+            "enterprise",
+        ),
+        (
+            &[
+                "gamestudio",
+                "game-studio",
+                "entertainment",
+                "interactive",
+                "production",
+                "media",
+                "creative",
+                "arts",
+                "film",
+                "vfx",
+            ],
+            "studio",
+        ),
+        (
+            &[
+                "unreal", "unity", "godot", "bevy", "amethyst", "three.js", "babylon",
+            ],
+            "game-dev",
+        ),
+        (
+            &[
+                "photosh",
+                "adobe",
+                "maya",
+                "blender",
+                "substance",
+                "houdini",
+                "nuke",
+                "fusion360",
+                "autocad",
+                "solidworks",
+            ],
+            "3d-artist",
+        ),
+        (
+            &["matlab", "simulink", "ansys", "comsol", "wolfram", "maple"],
+            "research",
+        ),
+        (
+            &[
+                "datadog",
+                "newrelic",
+                "databricks",
+                "snowflake",
+                "sentry",
+                "elastic",
+                "grafana",
+            ],
+            "devops",
+        ),
+        (
+            &[
+                "startup",
+                "saas",
+                "b2b",
+                "b2c",
+                "mobile",
+                "ios",
+                "android",
+                "react-native",
+                "flutter",
+            ],
+            "startup",
+        ),
+        (
+            &[
+                "education",
+                "edtech",
+                "course",
+                "tutorial",
+                "learning",
+                "academy",
+            ],
+            "education",
+        ),
+        (
+            &[
+                "opensource",
+                "open-source",
+                "open_source",
+                "oss",
+                "mit",
+                "apache-2.0",
+                "gpl",
+                "lgpl",
+            ],
+            "open-source",
+        ),
+        (
+            &[
+                "blockchain",
+                "web3",
+                "ethereum",
+                "solana",
+                "near",
+                "cosmos",
+                "crypto",
+                "nft",
+                "defi",
+            ],
+            "blockchain",
+        ),
+        (
+            &[
+                "ai",
+                "ml",
+                "deep-learning",
+                "machine-learning",
+                "neural",
+                "llm",
+                "gpt",
+                "transformer",
+                "pytorch",
+                "tensorflow",
+            ],
+            "ai-ml",
+        ),
+        (
+            &[
+                "robotics",
+                "ros",
+                "automation",
+                "industrial",
+                "iot",
+                "embedded",
+            ],
+            "industrial",
+        ),
+        (
+            &[
+                "government",
+                "public-sector",
+                "ministry",
+                "federal",
+                "state",
+                "agency",
+            ],
+            "government",
+        ),
+        (
+            &[
+                "e-commerce",
+                "ecommerce",
+                "shopify",
+                "woocommerce",
+                "magento",
+                "retail",
+            ],
+            "ecommerce",
+        ),
+        (
+            &[
+                "health",
+                "healthcare",
+                "medtech",
+                "bio",
+                "pharma",
+                "clinical",
+                "hospital",
+            ],
+            "healthcare",
+        ),
+        (
+            &[
+                "fintech",
+                "banking",
+                "finance",
+                "payment",
+                "insurance",
+                "investment",
+            ],
+            "fintech",
+        ),
     ];
 
     let mut scores: HashMap<&str, usize> = HashMap::new();
@@ -221,11 +472,16 @@ fn classify(enterprise: bool, paid_tools: bool, indicators: &[String]) -> Profil
         *scores.entry("3d-artist").or_insert(0) += 1;
     }
 
-    scores.into_iter()
+    scores
+        .into_iter()
         .max_by_key(|(_, count)| *count)
         .map(|(label, _)| label.to_string())
         .unwrap_or_else(|| {
-            if indicators.is_empty() { "unknown".to_string() } else { "indie".to_string() }
+            if indicators.is_empty() {
+                "unknown".to_string()
+            } else {
+                "indie".to_string()
+            }
         })
 }
 
@@ -236,7 +492,9 @@ fn count_cargo_deps(root: &Path) -> usize {
         for line in content.lines() {
             let trimmed = line.trim();
             if trimmed.starts_with('[') {
-                in_deps = trimmed.starts_with("[dependencies]") || trimmed.starts_with("[dev-dependencies]") || trimmed.starts_with("[build-dependencies]");
+                in_deps = trimmed.starts_with("[dependencies]")
+                    || trimmed.starts_with("[dev-dependencies]")
+                    || trimmed.starts_with("[build-dependencies]");
                 continue;
             }
             if in_deps && trimmed.contains('=') && !trimmed.starts_with('#') {
@@ -302,13 +560,20 @@ fn check_cargo_licenses(root: &Path) -> LicenseCheckResult {
     let mut license_issues = Vec::new();
     let mut version_issues = Vec::new();
 
-    let restricted = [
-        "BUSL-1.1", "BSL-1.1", "AGPL-3.0", "SSPL-1.0", "Elastic-2.0",
-    ];
+    let restricted = ["BUSL-1.1", "BSL-1.1", "AGPL-3.0", "SSPL-1.0", "Elastic-2.0"];
     let preferred = [
-        "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC",
-        "Unlicense", "CC0-1.0", "MPL-2.0", "LGPL-2.1", "LGPL-3.0",
-        "Zlib", "BlueOak-1.0.0",
+        "MIT",
+        "Apache-2.0",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "ISC",
+        "Unlicense",
+        "CC0-1.0",
+        "MPL-2.0",
+        "LGPL-2.1",
+        "LGPL-3.0",
+        "Zlib",
+        "BlueOak-1.0.0",
     ];
 
     let cargo_lock = root.join("Cargo.lock");
@@ -366,7 +631,11 @@ fn check_cargo_licenses(root: &Path) -> LicenseCheckResult {
         }
     }
 
-    LicenseCheckResult { deps, license_issues, version_issues }
+    LicenseCheckResult {
+        deps,
+        license_issues,
+        version_issues,
+    }
 }
 
 fn check_node_licenses(root: &Path) -> LicenseCheckResult {
@@ -374,9 +643,7 @@ fn check_node_licenses(root: &Path) -> LicenseCheckResult {
     let mut license_issues = Vec::new();
     let mut version_issues = Vec::new();
 
-    let restricted = [
-        "BUSL-1.1", "BSL-1.1", "AGPL-3.0", "SSPL-1.0", "Elastic-2.0",
-    ];
+    let restricted = ["BUSL-1.1", "BSL-1.1", "AGPL-3.0", "SSPL-1.0", "Elastic-2.0"];
 
     // Check package.json for name/version, try node_modules for license files
     if let Ok(content) = std::fs::read_to_string(root.join("package.json")) {
@@ -396,7 +663,10 @@ fn check_node_licenses(root: &Path) -> LicenseCheckResult {
                         is_outdated: false,
                         latest_version: None,
                     });
-                    if ver.as_str().map_or(false, |v| v.starts_with("0.") || v == "*") {
+                    if ver
+                        .as_str()
+                        .map_or(false, |v| v.starts_with("0.") || v == "*")
+                    {
                         version_issues.push(format!("{}: unstable version ({})", name, ver));
                     }
                 }
@@ -404,7 +674,11 @@ fn check_node_licenses(root: &Path) -> LicenseCheckResult {
         }
     }
 
-    LicenseCheckResult { deps, license_issues, version_issues }
+    LicenseCheckResult {
+        deps,
+        license_issues,
+        version_issues,
+    }
 }
 
 fn check_node_dep_license(root: &Path, name: &str) -> Option<String> {
@@ -417,7 +691,10 @@ fn check_node_dep_license(root: &Path, name: &str) -> Option<String> {
             }
             // Some packages use "licenses" (plural, array)
             if let Some(lics) = json.get("licenses").and_then(|l| l.as_array()) {
-                if let Some(first) = lics.first().and_then(|l| l.get("type").and_then(|t| t.as_str())) {
+                if let Some(first) = lics
+                    .first()
+                    .and_then(|l| l.get("type").and_then(|t| t.as_str()))
+                {
                     return Some(first.to_string());
                 }
             }
@@ -433,13 +710,19 @@ impl VerifyReport {
 
         out.push_str(&format!("Dependencies: {}\n", self.dependencies.len()));
         if !self.license_issues.is_empty() {
-            out.push_str(&format!("\nLicense Issues ({}):\n", self.license_issues.len()));
+            out.push_str(&format!(
+                "\nLicense Issues ({}):\n",
+                self.license_issues.len()
+            ));
             for issue in &self.license_issues {
                 out.push_str(&format!("  ! {}\n", issue));
             }
         }
         if !self.version_issues.is_empty() {
-            out.push_str(&format!("\nVersion Issues ({}):\n", self.version_issues.len()));
+            out.push_str(&format!(
+                "\nVersion Issues ({}):\n",
+                self.version_issues.len()
+            ));
             for issue in &self.version_issues {
                 out.push_str(&format!("  ~ {}\n", issue));
             }

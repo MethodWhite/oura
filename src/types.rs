@@ -15,9 +15,21 @@ impl Default for OuraConfig {
             max_iterations: 20,
             convergence_threshold: 90.0,
             feedback_sources: vec![
-                FeedbackSource { type_: "test".into(), command: Some("cargo test".into()), enabled: true },
-                FeedbackSource { type_: "lint".into(), command: Some("cargo clippy".into()), enabled: true },
-                FeedbackSource { type_: "typecheck".into(), command: None, enabled: false },
+                FeedbackSource {
+                    type_: "test".into(),
+                    command: Some("cargo test".into()),
+                    enabled: true,
+                },
+                FeedbackSource {
+                    type_: "lint".into(),
+                    command: Some("cargo clippy".into()),
+                    enabled: true,
+                },
+                FeedbackSource {
+                    type_: "typecheck".into(),
+                    command: None,
+                    enabled: false,
+                },
             ],
             sync_to_synapsis: true,
             working_directory: std::env::current_dir()

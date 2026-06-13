@@ -26,7 +26,8 @@ impl SynapsisBridge {
             "project": project,
         });
 
-        let _ = client.post(&format!("{}/memory/save", self.endpoint))
+        let _ = client
+            .post(&format!("{}/memory/save", self.endpoint))
             .json(&payload)
             .send()
             .await;

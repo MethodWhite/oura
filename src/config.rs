@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -141,7 +141,11 @@ impl Config {
                         return Self::apply_env_overrides(config);
                     }
                     Err(e) => {
-                        eprintln!("[Oura] Warning: failed to parse config at {}: {}", path.display(), e);
+                        eprintln!(
+                            "[Oura] Warning: failed to parse config at {}: {}",
+                            path.display(),
+                            e
+                        );
                     }
                 }
             }

@@ -1,10 +1,10 @@
+use crate::agents::*;
+use crate::engine::LoopEngine;
+use crate::types::*;
+use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use serde_json::{json, Value};
-use crate::types::*;
-use crate::engine::LoopEngine;
-use crate::agents::*;
 
 static MCP_CALL_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -71,7 +71,12 @@ impl McpServer {
 
         match request.method.as_str() {
             "initialize" => self.handle_initialize(id),
-            "initialized" => JsonRpcResponse { jsonrpc: "2.0".into(), id, result: None, error: None },
+            "initialized" => JsonRpcResponse {
+                jsonrpc: "2.0".into(),
+                id,
+                result: None,
+                error: None,
+            },
             "tools/list" => self.handle_tools_list(id),
             "tools/call" => self.handle_tools_call(id, request.params.as_ref()),
             "resources/list" => self.handle_resources_list(id),
@@ -92,7 +97,12 @@ impl McpServer {
     }
 
     fn ok(&self, id: Value, result: Value) -> JsonRpcResponse {
-        JsonRpcResponse { jsonrpc: "2.0".into(), id, result: Some(result), error: None }
+        JsonRpcResponse {
+            jsonrpc: "2.0".into(),
+            id,
+            result: Some(result),
+            error: None,
+        }
     }
 
     fn err(&self, id: Value, code: i32, message: String) -> JsonRpcResponse {
@@ -100,7 +110,11 @@ impl McpServer {
             jsonrpc: "2.0".into(),
             id,
             result: None,
-            error: Some(JsonRpcError { code, message, data: None }),
+            error: Some(JsonRpcError {
+                code,
+                message,
+                data: None,
+            }),
         }
     }
 
@@ -109,15 +123,18 @@ impl McpServer {
     }
 
     fn handle_initialize(&self, id: Value) -> JsonRpcResponse {
-        self.ok(id, json!({
-            "protocolVersion": "2024-11-05",
-            "capabilities": {
-                "tools": { "listChanged": true },
-                "resources": { "listChanged": true },
-                "prompts": { "listChanged": true }
-            },
-            "serverInfo": { "name": "oura", "version": env!("CARGO_PKG_VERSION") }
-        }))
+        self.ok(
+            id,
+            json!({
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": { "listChanged": true },
+                    "resources": { "listChanged": true },
+                    "prompts": { "listChanged": true }
+                },
+                "serverInfo": { "name": "oura", "version": env!("CARGO_PKG_VERSION") }
+            }),
+        )
     }
 
     fn handle_tools_list(&self, id: Value) -> JsonRpcResponse {
@@ -354,8 +371,10 @@ impl McpServer {
         self.engine.update_max_iterations(max_iter);
         match self.engine.start(goal) {
             Ok(state) => {
-                let msg = format!("Loop started: {}\nLoop ID: {}\nStatus: {}",
-                    goal, state.id, state.status);
+                let msg = format!(
+                    "Loop started: {}\nLoop ID: {}\nStatus: {}",
+                    goal, state.id, state.status
+                );
                 self.ok(id, json!({ "content": Self::text_content(msg) }))
             }
             Err(e) => self.err(id, -32603, format!("Failed to start loop: {}", e)),
@@ -365,10 +384,22 @@ impl McpServer {
     fn cmd_iterate(&mut self, id: Value) -> JsonRpcResponse {
         match self.engine.iterate() {
             Ok(result) => {
-                let errors = result.feedback.iter().filter(|f| f.type_ == "error").count();
-                let warnings = result.feedback.iter().filter(|f| f.type_ == "warning").count();
+                let errors = result
+                    .feedback
+                    .iter()
+                    .filter(|f| f.type_ == "error")
+                    .count();
+                let warnings = result
+                    .feedback
+                    .iter()
+                    .filter(|f| f.type_ == "warning")
+                    .count();
                 let done = result.actions.iter().filter(|a| a.status == "done").count();
-                let failed_actions = result.actions.iter().filter(|a| a.status == "error").count();
+                let failed_actions = result
+                    .actions
+                    .iter()
+                    .filter(|a| a.status == "error")
+                    .count();
 
                 let mut msg = format!(
                     "Iteration #{} - Score: {:.1}/100\nActions: {} done, {} errors\nFeedback: {} errors, {} warnings",
@@ -400,11 +431,20 @@ impl McpServer {
                     format!("Started: {}", state.start_time),
                 ];
                 if let Some(last) = last {
-                    lines.push(format!("Last Iteration: #{} (score: {:.1}/100)", last.iteration, last.score));
+                    lines.push(format!(
+                        "Last Iteration: #{} (score: {:.1}/100)",
+                        last.iteration, last.score
+                    ));
                 }
-                self.ok(id, json!({ "content": Self::text_content(lines.join("\n")) }))
+                self.ok(
+                    id,
+                    json!({ "content": Self::text_content(lines.join("\n")) }),
+                )
             }
-            None => self.ok(id, json!({ "content": Self::text_content("No active loop".into()) })),
+            None => self.ok(
+                id,
+                json!({ "content": Self::text_content("No active loop".into()) }),
+            ),
         }
     }
 
@@ -419,28 +459,34 @@ impl McpServer {
         let max_iterations = 20;
 
         let filtered: Vec<&IterationResult> = if iter_filter > 0 {
-            results.iter().filter(|r| r.iteration == iter_filter as u32).collect()
+            results
+                .iter()
+                .filter(|r| r.iteration == iter_filter as u32)
+                .collect()
         } else {
             results.iter().rev().take(max_iterations).collect()
         };
 
-        let summary: Vec<serde_json::Value> = filtered.iter().map(|r| {
-            json!({
-                "iteration": r.iteration,
-                "score": r.score,
-                "status": r.status,
-                "actions": r.actions.iter().map(|a| json!({
-                    "agent": a.agent,
-                    "type": a.type_,
-                    "status": a.status
-                })).collect::<Vec<_>>(),
-                "feedback": r.feedback.iter().map(|f| json!({
-                    "source": f.source,
-                    "type": f.type_,
-                    "message": f.message
-                })).collect::<Vec<_>>(),
+        let summary: Vec<serde_json::Value> = filtered
+            .iter()
+            .map(|r| {
+                json!({
+                    "iteration": r.iteration,
+                    "score": r.score,
+                    "status": r.status,
+                    "actions": r.actions.iter().map(|a| json!({
+                        "agent": a.agent,
+                        "type": a.type_,
+                        "status": a.status
+                    })).collect::<Vec<_>>(),
+                    "feedback": r.feedback.iter().map(|f| json!({
+                        "source": f.source,
+                        "type": f.type_,
+                        "message": f.message
+                    })).collect::<Vec<_>>(),
+                })
             })
-        }).collect();
+            .collect();
 
         self.ok(id, json!({ "content": Self::text_content(serde_json::to_string_pretty(&summary).unwrap_or_default()) }))
     }
@@ -458,7 +504,10 @@ impl McpServer {
                 std::env::set_current_dir(path).ok();
             }
         }
-        self.ok(id, json!({ "content": Self::text_content("Configuration updated".into()) }))
+        self.ok(
+            id,
+            json!({ "content": Self::text_content("Configuration updated".into()) }),
+        )
     }
 
     fn cmd_working_dir(&self, id: Value, args: &Value) -> JsonRpcResponse {
@@ -468,7 +517,10 @@ impl McpServer {
             return self.err(id, -32602, format!("Directory not found: {}", dir));
         }
         std::env::set_current_dir(path).ok();
-        self.ok(id, json!({ "content": Self::text_content(format!("Working directory set to: {}", dir)) }))
+        self.ok(
+            id,
+            json!({ "content": Self::text_content(format!("Working directory set to: {}", dir)) }),
+        )
     }
 
     fn cmd_plugin_load(&mut self, id: Value, _args: &Value) -> JsonRpcResponse {
@@ -476,13 +528,20 @@ impl McpServer {
     }
 
     fn cmd_plugin_list(&self, id: Value) -> JsonRpcResponse {
-        self.ok(id, json!({ "content": Self::text_content("No plugins loaded".into()) }))
+        self.ok(
+            id,
+            json!({ "content": Self::text_content("No plugins loaded".into()) }),
+        )
     }
 
     fn cmd_analyze_security(&self, id: Value, args: &Value) -> JsonRpcResponse {
         let files: Vec<String> = args["files"]
             .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         let auditor = SecurityAuditor::new();
@@ -505,9 +564,11 @@ impl McpServer {
         for f in &findings {
             report.push_str(&format!(
                 "\n[{}] {}:{} - {}\n  => {}",
-                f.severity.to_uppercase(), f.file,
+                f.severity.to_uppercase(),
+                f.file,
                 f.line.map(|l| l.to_string()).unwrap_or_else(|| "?".into()),
-                f.description, f.recommendation
+                f.description,
+                f.recommendation
             ));
         }
 
@@ -517,7 +578,11 @@ impl McpServer {
     fn cmd_analyze_code(&self, id: Value, args: &Value) -> JsonRpcResponse {
         let files: Vec<String> = args["files"]
             .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         let refactor = RefactorEngine::new();
@@ -552,11 +617,14 @@ impl McpServer {
     }
 
     fn cmd_guard_destructive(&self, id: Value, _args: &Value) -> JsonRpcResponse {
-        self.ok(id, json!({
-            "content": Self::text_content(
-                "Destructive query guard active: all DROP/DELETE/TRUNCATE/ALTER operations \
-                 require explicit confirmation with backup verification".into())
-        }))
+        self.ok(
+            id,
+            json!({
+                "content": Self::text_content(
+                    "Destructive query guard active: all DROP/DELETE/TRUNCATE/ALTER operations \
+                     require explicit confirmation with backup verification".into())
+            }),
+        )
     }
 
     fn cmd_analyze_project(&self, id: Value, args: &Value) -> JsonRpcResponse {
@@ -569,14 +637,28 @@ impl McpServer {
         }
 
         let mut report = String::new();
-        report.push_str(&format!("[{}] ({})\n", root_path.file_name().map(|n| n.to_string_lossy()).unwrap_or_else(|| "?".into()), root));
-        report.push_str(&format!("   Size: {}\n", format_size(dir_size(root_path).unwrap_or(0))));
+        report.push_str(&format!(
+            "[{}] ({})\n",
+            root_path
+                .file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_else(|| "?".into()),
+            root
+        ));
+        report.push_str(&format!(
+            "   Size: {}\n",
+            format_size(dir_size(root_path).unwrap_or(0))
+        ));
 
         let readme = find_readme(root_path);
         if let Some(rm) = readme {
             if let Ok(content) = std::fs::read_to_string(&rm) {
                 let preview: String = content.lines().take(8).collect::<Vec<_>>().join("\n");
-                report.push_str(&format!("   README: {} chars\n{}\n", content.len(), preview));
+                report.push_str(&format!(
+                    "   README: {} chars\n{}\n",
+                    content.len(),
+                    preview
+                ));
             }
         }
 
@@ -594,14 +676,23 @@ impl McpServer {
         let mut entries = collect_entries(root_path, 0, max_depth);
         entries.sort_by(|a, b| a.1.cmp(&b.1));
         for (path_str, depth, is_dir, size) in &entries {
-            if *depth == 0 || *depth > max_depth { continue; }
+            if *depth == 0 || *depth > max_depth {
+                continue;
+            }
             let indent = "  ".repeat(*depth);
             let marker = if *is_dir { "+" } else { " " };
-            let size_str = if *is_dir { String::new() } else { format!(" ({})", format_size(*size)) };
+            let size_str = if *is_dir {
+                String::new()
+            } else {
+                format!(" ({})", format_size(*size))
+            };
             report.push_str(&format!("{}{} {}{}\n", indent, marker, path_str, size_str));
         }
 
-        let large: Vec<_> = entries.iter().filter(|(_, _, is_dir, size)| !is_dir && *size > 100_000).collect();
+        let large: Vec<_> = entries
+            .iter()
+            .filter(|(_, _, is_dir, size)| !is_dir && *size > 100_000)
+            .collect();
         if !large.is_empty() {
             report.push_str(&format!("\n   Large files (>100KB): {}\n", large.len()));
             for (path_str, _, _, size) in large.iter().take(5) {
@@ -611,13 +702,19 @@ impl McpServer {
 
         let total_files = entries.iter().filter(|(_, _, is_dir, _)| !is_dir).count();
         let total_dirs = entries.iter().filter(|(_, _, is_dir, _)| *is_dir).count();
-        report.push_str(&format!("\n   Summary: {} dirs, {} files", total_dirs, total_files));
+        report.push_str(&format!(
+            "\n   Summary: {} dirs, {} files",
+            total_dirs, total_files
+        ));
 
         self.ok(id, json!({ "content": Self::text_content(report) }))
     }
 
     fn cmd_mcp_call(&self, id: Value, args: &Value) -> JsonRpcResponse {
-        let server_url = args["server_url"].as_str().unwrap_or("").trim_end_matches('/');
+        let server_url = args["server_url"]
+            .as_str()
+            .unwrap_or("")
+            .trim_end_matches('/');
         let tool_name = args["tool_name"].as_str().unwrap_or("");
         let tool_args = args.get("arguments").cloned().unwrap_or(json!({}));
         let endpoint = args["endpoint"].as_str().unwrap_or("/message");
@@ -642,9 +739,10 @@ impl McpServer {
             Ok(response_text) => {
                 self.ok(id, json!({ "content": Self::text_content(response_text) }))
             }
-            Err(e) => {
-                self.ok(id, json!({ "content": Self::text_content(format!("MCP call failed: {}", e)) }))
-            }
+            Err(e) => self.ok(
+                id,
+                json!({ "content": Self::text_content(format!("MCP call failed: {}", e)) }),
+            ),
         }
     }
 
@@ -661,11 +759,17 @@ impl McpServer {
                 Ok(c) => {
                     let resp = c.post(&url).json(&body).send().map_err(|e| e.to_string());
                     match resp {
-                        Ok(r) => { let _ = tx.send(r.text().map_err(|e| e.to_string())); }
-                        Err(e) => { let _ = tx.send(Err(e)); }
+                        Ok(r) => {
+                            let _ = tx.send(r.text().map_err(|e| e.to_string()));
+                        }
+                        Err(e) => {
+                            let _ = tx.send(Err(e));
+                        }
                     }
                 }
-                Err(e) => { let _ = tx.send(Err(e)); }
+                Err(e) => {
+                    let _ = tx.send(Err(e));
+                }
             }
         });
         rx.recv_timeout(std::time::Duration::from_secs(35))
@@ -703,9 +807,12 @@ impl McpServer {
         let project_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
 
         if !project_dir.join(".git").exists() {
-            return self.ok(id, json!({
-                "content": Self::text_content("Not a git repository. Can't auto-update.".into())
-            }));
+            return self.ok(
+                id,
+                json!({
+                    "content": Self::text_content("Not a git repository. Can't auto-update.".into())
+                }),
+            );
         }
 
         // Detect default branch
@@ -715,11 +822,18 @@ impl McpServer {
             .output()
             .ok()
             .and_then(|o| String::from_utf8(o.stdout).ok())
-            .map(|s| s.trim().trim_start_matches("refs/remotes/origin/").to_string())
+            .map(|s| {
+                s.trim()
+                    .trim_start_matches("refs/remotes/origin/")
+                    .to_string()
+            })
             .unwrap_or_else(|| "main".into());
 
         let mut report = String::new();
-        report.push_str(&format!("Oura v{} - checking for updates...\n", env!("CARGO_PKG_VERSION")));
+        report.push_str(&format!(
+            "Oura v{} - checking for updates...\n",
+            env!("CARGO_PKG_VERSION")
+        ));
 
         let git_fetch = run_command_timeout(&["git", "fetch", "--quiet"], project_dir, 30);
 
@@ -745,9 +859,7 @@ impl McpServer {
             .output();
 
         let commits_behind = match ahead {
-            Ok(output) => {
-                String::from_utf8_lossy(&output.stdout).trim().to_string()
-            }
+            Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
             Err(_) => "?".to_string(),
         };
 
@@ -761,7 +873,11 @@ impl McpServer {
             .unwrap_or_else(|| "?".into());
 
         let remote_hash = std::process::Command::new("git")
-            .args(["rev-parse", "--short", &format!("origin/{}", default_branch)])
+            .args([
+                "rev-parse",
+                "--short",
+                &format!("origin/{}", default_branch),
+            ])
             .current_dir(project_dir)
             .output()
             .ok()
@@ -769,8 +885,13 @@ impl McpServer {
             .map(|s| s.trim().to_string())
             .unwrap_or_else(|| "?".into());
 
-        report.push_str(&format!("Local: v{} @{}\nRemote: @{}\nBehind: {} commits\n",
-            env!("CARGO_PKG_VERSION"), local_hash, remote_hash, commits_behind));
+        report.push_str(&format!(
+            "Local: v{} @{}\nRemote: @{}\nBehind: {} commits\n",
+            env!("CARGO_PKG_VERSION"),
+            local_hash,
+            remote_hash,
+            commits_behind
+        ));
 
         let behind_count: i32 = commits_behind.parse().unwrap_or(0);
 
@@ -782,7 +903,8 @@ impl McpServer {
             match pull {
                 Ok(output) if output.status.success() => {
                     report.push_str("\nGit pull OK. Rebuilding...");
-                    let build = run_command_timeout(&["cargo", "build", "--release"], project_dir, 300);
+                    let build =
+                        run_command_timeout(&["cargo", "build", "--release"], project_dir, 300);
 
                     match build {
                         Ok(b) if b.status.success() => {
@@ -806,16 +928,20 @@ impl McpServer {
                 }
             }
         } else {
-            report.push_str(&format!("\n{} commits behind. Run oura_update with apply=true to update.", behind_count));
+            report.push_str(&format!(
+                "\n{} commits behind. Run oura_update with apply=true to update.",
+                behind_count
+            ));
         }
 
         self.ok(id, json!({ "content": Self::text_content(report) }))
     }
 
     fn cmd_profile(&self, id: Value, args: &Value) -> JsonRpcResponse {
-        let root = args["path"].as_str().map(Path::new).unwrap_or_else(|| {
-            &std::path::Path::new(".")
-        });
+        let root = args["path"]
+            .as_str()
+            .map(Path::new)
+            .unwrap_or_else(|| &std::path::Path::new("."));
         let profile = crate::profile::ProjectProfile::detect(root);
         let summary = profile.summary();
 
@@ -830,16 +956,24 @@ impl McpServer {
             "indicators": profile.indicators,
         });
 
-        let report = format!("{}\n\n---\n{}", summary, serde_json::to_string_pretty(&json_output).unwrap_or_default());
+        let report = format!(
+            "{}\n\n---\n{}",
+            summary,
+            serde_json::to_string_pretty(&json_output).unwrap_or_default()
+        );
         self.ok(id, json!({ "content": Self::text_content(report) }))
     }
 
     fn cmd_verify(&self, id: Value, args: &Value) -> JsonRpcResponse {
-        let root = args["path"].as_str().map(Path::new).unwrap_or_else(|| {
-            &std::path::Path::new(".")
-        });
+        let root = args["path"]
+            .as_str()
+            .map(Path::new)
+            .unwrap_or_else(|| &std::path::Path::new("."));
         let report = crate::profile::verify_dependencies(root);
-        self.ok(id, json!({ "content": Self::text_content(report.summary()) }))
+        self.ok(
+            id,
+            json!({ "content": Self::text_content(report.summary()) }),
+        )
     }
 
     fn handle_resources_list(&self, id: Value) -> JsonRpcResponse {
@@ -858,13 +992,16 @@ impl McpServer {
 
         let content = match uri {
             "oura://state" => serde_json::to_string_pretty(&state).unwrap_or_default(),
-            "oura://results" => serde_json::to_string_pretty(
-                &state.map(|s| s.history.clone()).unwrap_or_default()
-            ).unwrap_or_default(),
+            "oura://results" => {
+                serde_json::to_string_pretty(&state.map(|s| s.history.clone()).unwrap_or_default())
+                    .unwrap_or_default()
+            }
             "oura://config" => {
                 let max_iter = *self.engine.max_iterations().lock().unwrap();
                 let threshold = *self.engine.convergence_threshold().lock().unwrap();
-                let cwd = std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                let cwd = std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
                 let config_json = json!({
                     "max_iterations": max_iter,
                     "convergence_threshold": threshold,
@@ -875,13 +1012,16 @@ impl McpServer {
             _ => return self.err(id, -32602, format!("Unknown resource: {}", uri)),
         };
 
-        self.ok(id, json!({
-            "contents": [{
-                "uri": uri,
-                "mimeType": "application/json",
-                "text": content
-            }]
-        }))
+        self.ok(
+            id,
+            json!({
+                "contents": [{
+                    "uri": uri,
+                    "mimeType": "application/json",
+                    "text": content
+                }]
+            }),
+        )
     }
 
     fn handle_prompts_list(&self, id: Value) -> JsonRpcResponse {
@@ -950,12 +1090,25 @@ impl McpServer {
         let older_than = args["older_than_days"].as_u64().unwrap_or(30);
         let patterns: Vec<String> = args["patterns"]
             .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-            .unwrap_or_else(|| vec![
-                "*.tmp".into(), "*.temp".into(), "*.log".into(), "*.bak".into(),
-                "*.swp".into(), "*.swo".into(), "*.pyc".into(), "__pycache__".into(),
-                ".DS_Store".into(), "Thumbs.db".into(),
-            ]);
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_else(|| {
+                vec![
+                    "*.tmp".into(),
+                    "*.temp".into(),
+                    "*.log".into(),
+                    "*.bak".into(),
+                    "*.swp".into(),
+                    "*.swo".into(),
+                    "*.pyc".into(),
+                    "__pycache__".into(),
+                    ".DS_Store".into(),
+                    "Thumbs.db".into(),
+                ]
+            });
         let dir_patterns = ["node_modules", ".next", ".turbo", "dist", "build", ".cache"];
 
         let root_path = Path::new(root);
@@ -967,22 +1120,43 @@ impl McpServer {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let max_age = if older_than > 0 { older_than * 86400 } else { u64::MAX };
+        let max_age = if older_than > 0 {
+            older_than * 86400
+        } else {
+            u64::MAX
+        };
 
         let mut report = String::new();
         let mut candidates: Vec<(String, String)> = Vec::new();
         let mut total_size: u64 = 0;
 
-        cleanup_walk(root_path, &patterns, &dir_patterns, &mut candidates, &mut total_size, now, max_age, 0, 10);
+        cleanup_walk(
+            root_path,
+            &patterns,
+            &dir_patterns,
+            &mut candidates,
+            &mut total_size,
+            now,
+            max_age,
+            0,
+            10,
+        );
 
         if candidates.is_empty() {
-            report = format!("No cleanup candidates found in {}. Everything looks clean.", root);
+            report = format!(
+                "No cleanup candidates found in {}. Everything looks clean.",
+                root
+            );
         } else {
             report.push_str(&format!("Cleanup candidates in {}:\n", root));
             for (path, reason) in &candidates {
                 report.push_str(&format!("  - {} ({})\n", path, reason));
             }
-            report.push_str(&format!("\nTotal: {} items, {}\n", candidates.len(), format_size(total_size)));
+            report.push_str(&format!(
+                "\nTotal: {} items, {}\n",
+                candidates.len(),
+                format_size(total_size)
+            ));
 
             if !dry_run {
                 let mut deleted = 0;
@@ -1017,15 +1191,21 @@ impl McpServer {
     }
 }
 
-fn run_command_timeout(args: &[&str], dir: &Path, secs: u64) -> std::result::Result<std::process::Output, String> {
+fn run_command_timeout(
+    args: &[&str],
+    dir: &Path,
+    secs: u64,
+) -> std::result::Result<std::process::Output, String> {
     let (tx, rx) = std::sync::mpsc::channel();
     let dir = dir.to_path_buf();
     let args_owned: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     std::thread::spawn(move || {
-        let _ = tx.send(std::process::Command::new(&args_owned[0])
-            .args(&args_owned[1..])
-            .current_dir(&dir)
-            .output());
+        let _ = tx.send(
+            std::process::Command::new(&args_owned[0])
+                .args(&args_owned[1..])
+                .current_dir(&dir)
+                .output(),
+        );
     });
     match rx.recv_timeout(std::time::Duration::from_secs(secs)) {
         Ok(result) => result.map_err(|e| format!("Command failed: {}", e)),
@@ -1043,7 +1223,9 @@ fn dir_size(path: &Path) -> std::io::Result<u64> {
 }
 
 fn walk_size(path: &Path, depth: usize, max_depth: usize, total: &mut u64) -> std::io::Result<()> {
-    if depth > max_depth { return Ok(()); }
+    if depth > max_depth {
+        return Ok(());
+    }
     if path.is_dir() {
         let mut visited = std::collections::HashSet::new();
         walk_size_inner(path, depth, max_depth, total, &mut visited)
@@ -1052,8 +1234,16 @@ fn walk_size(path: &Path, depth: usize, max_depth: usize, total: &mut u64) -> st
     }
 }
 
-fn walk_size_inner(path: &Path, depth: usize, max_depth: usize, total: &mut u64, visited: &mut std::collections::HashSet<u64>) -> std::io::Result<()> {
-    if depth > max_depth { return Ok(()); }
+fn walk_size_inner(
+    path: &Path,
+    depth: usize,
+    max_depth: usize,
+    total: &mut u64,
+    visited: &mut std::collections::HashSet<u64>,
+) -> std::io::Result<()> {
+    if depth > max_depth {
+        return Ok(());
+    }
     if let Ok(meta) = path.metadata() {
         #[cfg(unix)]
         let ino = std::os::unix::fs::MetadataExt::ino(&meta);
@@ -1067,7 +1257,9 @@ fn walk_size_inner(path: &Path, depth: usize, max_depth: usize, total: &mut u64,
         for entry in std::fs::read_dir(path)? {
             let e = entry?;
             let p = e.path();
-            if p.is_symlink() { continue; }
+            if p.is_symlink() {
+                continue;
+            }
             if p.is_file() {
                 *total += e.metadata()?.len();
             } else if p.is_dir() {
@@ -1080,7 +1272,9 @@ fn walk_size_inner(path: &Path, depth: usize, max_depth: usize, total: &mut u64,
 
 fn format_size(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB"];
-    if bytes == 0 { return "0B".into(); }
+    if bytes == 0 {
+        return "0B".into();
+    }
     let mut size = bytes as f64;
     let mut unit = 0;
     while size >= 1024.0 && unit < UNITS.len() - 1 {
@@ -1091,20 +1285,42 @@ fn format_size(bytes: u64) -> String {
 }
 
 fn find_readme(path: &Path) -> Option<std::path::PathBuf> {
-    let names = ["README.md", "Readme.md", "readme.md", "README", "LEEME.md", "README.txt"];
+    let names = [
+        "README.md",
+        "Readme.md",
+        "readme.md",
+        "README",
+        "LEEME.md",
+        "README.txt",
+    ];
     for name in &names {
         let p = path.join(name);
-        if p.exists() { return Some(p); }
+        if p.exists() {
+            return Some(p);
+        }
     }
     None
 }
 
 fn scan_configs(path: &Path) -> Vec<String> {
     let configs = [
-        "Cargo.toml", "package.json", "pyproject.toml", "go.mod", "CMakeLists.txt",
-        "Makefile", "Dockerfile", "docker-compose.yml", "compose.yaml",
-        ".env.example", ".gitignore", ".editorconfig", "tsconfig.json",
-        "opencode.json", "opencode.jsonc", "claude-code.json", "cursor.json",
+        "Cargo.toml",
+        "package.json",
+        "pyproject.toml",
+        "go.mod",
+        "CMakeLists.txt",
+        "Makefile",
+        "Dockerfile",
+        "docker-compose.yml",
+        "compose.yaml",
+        ".env.example",
+        ".gitignore",
+        ".editorconfig",
+        "tsconfig.json",
+        "opencode.json",
+        "opencode.jsonc",
+        "claude-code.json",
+        "cursor.json",
     ];
     let mut found = Vec::new();
     for name in &configs {
@@ -1122,8 +1338,16 @@ fn collect_entries(path: &Path, depth: usize, max_depth: usize) -> Vec<(String, 
     entries
 }
 
-fn collect_entries_inner(path: &Path, depth: usize, max_depth: usize, entries: &mut Vec<(String, usize, bool, u64)>, visited: &mut std::collections::HashSet<u64>) {
-    if depth > max_depth || !path.is_dir() { return; }
+fn collect_entries_inner(
+    path: &Path,
+    depth: usize,
+    max_depth: usize,
+    entries: &mut Vec<(String, usize, bool, u64)>,
+    visited: &mut std::collections::HashSet<u64>,
+) {
+    if depth > max_depth || !path.is_dir() {
+        return;
+    }
     if let Ok(meta) = path.metadata() {
         #[cfg(unix)]
         let ino = std::os::unix::fs::MetadataExt::ino(&meta);
@@ -1136,11 +1360,22 @@ fn collect_entries_inner(path: &Path, depth: usize, max_depth: usize, entries: &
     if let Ok(readdir) = std::fs::read_dir(path) {
         for entry in readdir.flatten() {
             let p = entry.path();
-            if p.is_symlink() { continue; }
-            let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            if name.starts_with('.') { continue; }
+            if p.is_symlink() {
+                continue;
+            }
+            let name = p
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if name.starts_with('.') {
+                continue;
+            }
             let is_dir = p.is_dir();
-            let size = if is_dir { 0 } else { p.metadata().map(|m| m.len()).unwrap_or(0) };
+            let size = if is_dir {
+                0
+            } else {
+                p.metadata().map(|m| m.len()).unwrap_or(0)
+            };
             entries.push((name.clone(), depth, is_dir, size));
             if is_dir {
                 collect_entries_inner(&p, depth + 1, max_depth, entries, visited);
@@ -1161,7 +1396,18 @@ fn cleanup_walk(
     max_depth: usize,
 ) {
     let mut visited = std::collections::HashSet::new();
-    cleanup_walk_inner(path, patterns, dir_patterns, candidates, total_size, now, max_age, depth, max_depth, &mut visited);
+    cleanup_walk_inner(
+        path,
+        patterns,
+        dir_patterns,
+        candidates,
+        total_size,
+        now,
+        max_age,
+        depth,
+        max_depth,
+        &mut visited,
+    );
 }
 
 fn cleanup_walk_inner(
@@ -1176,7 +1422,9 @@ fn cleanup_walk_inner(
     max_depth: usize,
     visited: &mut std::collections::HashSet<u64>,
 ) {
-    if depth > max_depth || !path.is_dir() { return; }
+    if depth > max_depth || !path.is_dir() {
+        return;
+    }
     if let Ok(meta) = path.metadata() {
         #[cfg(unix)]
         let ino = std::os::unix::fs::MetadataExt::ino(&meta);
@@ -1189,9 +1437,16 @@ fn cleanup_walk_inner(
     if let Ok(readdir) = std::fs::read_dir(path) {
         for entry in readdir.flatten() {
             let p = entry.path();
-            if p.is_symlink() { continue; }
-            let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            if name.starts_with('.') { continue; }
+            if p.is_symlink() {
+                continue;
+            }
+            let name = p
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if name.starts_with('.') {
+                continue;
+            }
 
             if p.is_dir() {
                 if dir_patterns.contains(&name.as_str()) {
@@ -1199,7 +1454,18 @@ fn cleanup_walk_inner(
                     *total_size += size;
                     candidates.push((p.to_string_lossy().to_string(), format!("{} dir", name)));
                 } else {
-                    cleanup_walk_inner(&p, patterns, dir_patterns, candidates, total_size, now, max_age, depth + 1, max_depth, visited);
+                    cleanup_walk_inner(
+                        &p,
+                        patterns,
+                        dir_patterns,
+                        candidates,
+                        total_size,
+                        now,
+                        max_age,
+                        depth + 1,
+                        max_depth,
+                        visited,
+                    );
                 }
             } else {
                 let matched = patterns.iter().any(|pat| {
@@ -1221,9 +1487,15 @@ fn cleanup_walk_inner(
                                 } else {
                                     "temp file".into()
                                 }
-                            } else { "temp file".into() }
-                        } else { "temp file".into() }
-                    } else { "temp file".into() };
+                            } else {
+                                "temp file".into()
+                            }
+                        } else {
+                            "temp file".into()
+                        }
+                    } else {
+                        "temp file".into()
+                    };
                     candidates.push((p.to_string_lossy().to_string(), reason));
                 }
             }

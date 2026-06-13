@@ -1,5 +1,5 @@
-use std::process::Command;
 use crate::config::{Config, RepoConfig};
+use std::process::Command;
 
 #[derive(Debug, Clone)]
 pub struct GitHubRepo {
@@ -38,7 +38,10 @@ pub struct GitHubClient {
 
 impl GitHubClient {
     pub fn new(config: &Config) -> Option<Self> {
-        let token = config.github.token.clone()
+        let token = config
+            .github
+            .token
+            .clone()
             .or_else(|| std::env::var("GITHUB_TOKEN").ok())
             .or_else(|| std::env::var("GH_TOKEN").ok())?;
 
@@ -54,17 +57,27 @@ impl GitHubClient {
     }
 
     pub fn repos(&self) -> Vec<GitHubRepo> {
-        let mut repos: Vec<GitHubRepo> = self.config.github.repos.iter().map(|r| GitHubRepo {
-            owner: r.owner.clone(),
-            repo: r.repo.clone(),
-            branch: r.branch.clone(),
-            base_branch: r.base_branch.clone(),
-            local_path: None,
-        }).collect();
+        let mut repos: Vec<GitHubRepo> = self
+            .config
+            .github
+            .repos
+            .iter()
+            .map(|r| GitHubRepo {
+                owner: r.owner.clone(),
+                repo: r.repo.clone(),
+                branch: r.branch.clone(),
+                base_branch: r.base_branch.clone(),
+                local_path: None,
+            })
+            .collect();
 
-        if !self.config.github.default_owner.is_empty() && !self.config.github.default_repo.is_empty() {
-            let exists = repos.iter().any(|r|
-                r.owner == self.config.github.default_owner && r.repo == self.config.github.default_repo);
+        if !self.config.github.default_owner.is_empty()
+            && !self.config.github.default_repo.is_empty()
+        {
+            let exists = repos.iter().any(|r| {
+                r.owner == self.config.github.default_owner
+                    && r.repo == self.config.github.default_repo
+            });
             if !exists {
                 repos.push(GitHubRepo {
                     owner: self.config.github.default_owner.clone(),
@@ -79,8 +92,18 @@ impl GitHubClient {
         repos
     }
 
-    pub async fn create_pr(&self, repo: &RepoConfig, title: &str, body: &str, head: &str, base: &str) -> anyhow::Result<PullRequest> {
-        let url = format!("https://api.github.com/repos/{}/{}/pulls", repo.owner, repo.repo);
+    pub async fn create_pr(
+        &self,
+        repo: &RepoConfig,
+        title: &str,
+        body: &str,
+        head: &str,
+        base: &str,
+    ) -> anyhow::Result<PullRequest> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/pulls",
+            repo.owner, repo.repo
+        );
         let payload = serde_json::json!({
             "title": format!("{}{}", self.config.github.pr_title_prefix, title),
             "body": body,
@@ -88,7 +111,9 @@ impl GitHubClient {
             "base": base,
         });
 
-        let resp = self.client.post(&url)
+        let resp = self
+            .client
+            .post(&url)
             .header("Authorization", format!("Bearer {}", self.token))
             .header("User-Agent", "oura")
             .json(&payload)
@@ -112,13 +137,23 @@ impl GitHubClient {
         })
     }
 
-    pub async fn list_workflow_runs(&self, owner: &str, repo: &str, branch: Option<&str>) -> anyhow::Result<Vec<WorkflowRun>> {
-        let mut url = format!("https://api.github.com/repos/{}/{}/actions/runs", owner, repo);
+    pub async fn list_workflow_runs(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: Option<&str>,
+    ) -> anyhow::Result<Vec<WorkflowRun>> {
+        let mut url = format!(
+            "https://api.github.com/repos/{}/{}/actions/runs",
+            owner, repo
+        );
         if let Some(b) = branch {
             url.push_str(&format!("?branch={}", b));
         }
 
-        let resp = self.client.get(&url)
+        let resp = self
+            .client
+            .get(&url)
             .header("Authorization", format!("Bearer {}", self.token))
             .header("User-Agent", "oura")
             .send()
@@ -129,26 +164,43 @@ impl GitHubClient {
         }
 
         let data: serde_json::Value = resp.json().await?;
-        let runs = data["workflow_runs"].as_array()
-            .map(|arr| arr.iter().map(|r| WorkflowRun {
-                id: r["id"].as_u64().unwrap_or(0),
-                name: r["name"].as_str().unwrap_or("").into(),
-                status: r["status"].as_str().unwrap_or("").into(),
-                conclusion: r["conclusion"].as_str().map(String::from),
-                html_url: r["html_url"].as_str().unwrap_or("").into(),
-            }).collect())
+        let runs = data["workflow_runs"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .map(|r| WorkflowRun {
+                        id: r["id"].as_u64().unwrap_or(0),
+                        name: r["name"].as_str().unwrap_or("").into(),
+                        status: r["status"].as_str().unwrap_or("").into(),
+                        conclusion: r["conclusion"].as_str().map(String::from),
+                        html_url: r["html_url"].as_str().unwrap_or("").into(),
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
 
         Ok(runs)
     }
 
-    pub async fn wait_for_workflow(&self, owner: &str, repo: &str, run_id: u64, poll_secs: u64, max_polls: u32) -> anyhow::Result<Option<String>> {
-        let url = format!("https://api.github.com/repos/{}/{}/actions/runs/{}", owner, repo, run_id);
+    pub async fn wait_for_workflow(
+        &self,
+        owner: &str,
+        repo: &str,
+        run_id: u64,
+        poll_secs: u64,
+        max_polls: u32,
+    ) -> anyhow::Result<Option<String>> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/actions/runs/{}",
+            owner, repo, run_id
+        );
 
         for i in 0..max_polls {
             tokio::time::sleep(tokio::time::Duration::from_secs(poll_secs)).await;
 
-            let resp = self.client.get(&url)
+            let resp = self
+                .client
+                .get(&url)
                 .header("Authorization", format!("Bearer {}", self.token))
                 .header("User-Agent", "oura")
                 .send()
@@ -166,22 +218,42 @@ impl GitHubClient {
                 return Ok(conclusion.map(String::from));
             }
 
-            eprintln!("[Oura:GitHub] Workflow {}/{} run {}: {}/{} (poll {}/{})",
-                owner, repo, run_id, status, conclusion.unwrap_or("in_progress"), i + 1, max_polls);
+            eprintln!(
+                "[Oura:GitHub] Workflow {}/{} run {}: {}/{} (poll {}/{})",
+                owner,
+                repo,
+                run_id,
+                status,
+                conclusion.unwrap_or("in_progress"),
+                i + 1,
+                max_polls
+            );
         }
 
         anyhow::bail!("Workflow did not complete within {} polls", max_polls)
     }
 
-    pub async fn dispatch_workflow(&self, owner: &str, repo: &str, workflow: &str, r#ref: &str, inputs: serde_json::Value) -> anyhow::Result<()> {
-        let url = format!("https://api.github.com/repos/{}/{}/actions/workflows/{}/dispatches", owner, repo, workflow);
+    pub async fn dispatch_workflow(
+        &self,
+        owner: &str,
+        repo: &str,
+        workflow: &str,
+        r#ref: &str,
+        inputs: serde_json::Value,
+    ) -> anyhow::Result<()> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/actions/workflows/{}/dispatches",
+            owner, repo, workflow
+        );
 
         let payload = serde_json::json!({
             "ref": r#ref,
             "inputs": inputs,
         });
 
-        let resp = self.client.post(&url)
+        let resp = self
+            .client
+            .post(&url)
             .header("Authorization", format!("Bearer {}", self.token))
             .header("User-Agent", "oura")
             .json(&payload)
@@ -196,17 +268,28 @@ impl GitHubClient {
         Ok(())
     }
 
-    pub async fn auto_commit_and_push(&self, repo: &RepoConfig, message: &str, files: &[String]) -> anyhow::Result<()> {
+    pub async fn auto_commit_and_push(
+        &self,
+        repo: &RepoConfig,
+        message: &str,
+        files: &[String],
+    ) -> anyhow::Result<()> {
         let work_dir = std::env::temp_dir().join(format!("oura-{}-{}", repo.owner, repo.repo));
 
         // Clone using token via temporary .git-credentials file (avoids process table exposure)
         if !work_dir.join(".git").exists() {
             let cred_path = work_dir.join(".git-credentials");
-            std::fs::write(&cred_path, format!("https://x-access-token:{}@github.com", self.token))?;
+            std::fs::write(
+                &cred_path,
+                format!("https://x-access-token:{}@github.com", self.token),
+            )?;
             let clone_url = format!("https://github.com/{}/{}.git", repo.owner, repo.repo);
             let status = Command::new("git")
                 .args(["clone", "--depth=1", &clone_url, work_dir.to_str().unwrap()])
-                .env("GIT_CREDENTIAL_HELPER", &format!("store --file {}", cred_path.display()))
+                .env(
+                    "GIT_CREDENTIAL_HELPER",
+                    &format!("store --file {}", cred_path.display()),
+                )
                 .status()?;
             let _ = std::fs::remove_file(&cred_path);
             if !status.success() {
@@ -229,7 +312,10 @@ impl GitHubClient {
             .args(["-C", work_dir.to_str().unwrap(), "add", "."])
             .output()?;
         if !output.status.success() {
-            anyhow::bail!("git add failed: {}", String::from_utf8_lossy(&output.stderr));
+            anyhow::bail!(
+                "git add failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
 
         let output = Command::new("git")
@@ -237,12 +323,23 @@ impl GitHubClient {
             .output()?;
 
         // If there's nothing to commit, that's fine
-        if output.status.success() || String::from_utf8_lossy(&output.stderr).contains("nothing to commit") {
+        if output.status.success()
+            || String::from_utf8_lossy(&output.stderr).contains("nothing to commit")
+        {
             let output = Command::new("git")
-                .args(["-C", work_dir.to_str().unwrap(), "push", "origin", &repo.branch])
+                .args([
+                    "-C",
+                    work_dir.to_str().unwrap(),
+                    "push",
+                    "origin",
+                    &repo.branch,
+                ])
                 .output()?;
             if !output.status.success() {
-                anyhow::bail!("git push failed: {}", String::from_utf8_lossy(&output.stderr));
+                anyhow::bail!(
+                    "git push failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
             }
         }
 

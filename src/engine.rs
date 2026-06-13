@@ -1,9 +1,12 @@
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use crate::types::*;
+use chrono::Utc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
 use std::time::Instant;
-use chrono::Utc;
 use uuid::Uuid;
-use crate::types::*;
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
@@ -47,12 +50,29 @@ impl LoopEngine {
         }
     }
 
-    pub fn configure(&mut self, max_iter: Option<u32>, threshold: Option<f64>, runtime: Option<u64>, test_cmd: Option<String>, clippy_cmd: Option<String>) {
-        if let Some(v) = max_iter { *lock(&self.max_iterations) = v; }
-        if let Some(v) = threshold { *lock(&self.convergence_threshold) = v; }
-        if let Some(v) = runtime { *lock(&self.max_runtime_secs) = v; }
-        if let Some(v) = test_cmd { *lock(&self.test_command) = v; }
-        if let Some(v) = clippy_cmd { *lock(&self.clippy_command) = v; }
+    pub fn configure(
+        &mut self,
+        max_iter: Option<u32>,
+        threshold: Option<f64>,
+        runtime: Option<u64>,
+        test_cmd: Option<String>,
+        clippy_cmd: Option<String>,
+    ) {
+        if let Some(v) = max_iter {
+            *lock(&self.max_iterations) = v;
+        }
+        if let Some(v) = threshold {
+            *lock(&self.convergence_threshold) = v;
+        }
+        if let Some(v) = runtime {
+            *lock(&self.max_runtime_secs) = v;
+        }
+        if let Some(v) = test_cmd {
+            *lock(&self.test_command) = v;
+        }
+        if let Some(v) = clippy_cmd {
+            *lock(&self.clippy_command) = v;
+        }
     }
 
     pub fn start(&mut self, goal: &str) -> anyhow::Result<LoopState> {
@@ -173,7 +193,8 @@ impl LoopEngine {
                         id: Uuid::new_v4().to_string(),
                         agent: "anti-deletion".into(),
                         type_: "check_integrity".into(),
-                        description: "Check code integrity and prevent critical function loss".into(),
+                        description: "Check code integrity and prevent critical function loss"
+                            .into(),
                         target: "critical_paths".into(),
                         status: "pending".into(),
                         result: None,
@@ -187,8 +208,16 @@ impl LoopEngine {
                 result.feedback = feedback_entries;
                 result.started_at = Utc::now().to_rfc3339();
 
-                let error_count = result.feedback.iter().filter(|f| f.type_ == "error").count() as f64;
-                let warning_count = result.feedback.iter().filter(|f| f.type_ == "warning").count() as f64;
+                let error_count = result
+                    .feedback
+                    .iter()
+                    .filter(|f| f.type_ == "error")
+                    .count() as f64;
+                let warning_count = result
+                    .feedback
+                    .iter()
+                    .filter(|f| f.type_ == "warning")
+                    .count() as f64;
 
                 let mut score = 100.0 - (error_count * 15.0) - (warning_count * 5.0);
                 score = score.clamp(0.0, 100.0);
@@ -196,7 +225,8 @@ impl LoopEngine {
                 result.completed_at = Some(Utc::now().to_rfc3339());
 
                 let has_feedback = !result.feedback.is_empty();
-                let converged = has_feedback && (score >= threshold || (error_count == 0.0 && warning_count == 0.0));
+                let converged = has_feedback
+                    && (score >= threshold || (error_count == 0.0 && warning_count == 0.0));
 
                 {
                     let mut state_guard = lock(&state_clone);
@@ -234,7 +264,8 @@ impl LoopEngine {
         }
 
         let mut state_guard = lock(&self.state);
-        let state = state_guard.as_mut()
+        let state = state_guard
+            .as_mut()
             .ok_or_else(|| anyhow::anyhow!("No active loop"))?;
 
         if state.status != "running" {
@@ -299,8 +330,16 @@ impl LoopEngine {
         let feedback_entries = collect_feedback_with_commands(&test_cmd, &clippy_cmd);
         result.feedback = feedback_entries;
 
-        let error_count = result.feedback.iter().filter(|f| f.type_ == "error").count() as f64;
-        let warning_count = result.feedback.iter().filter(|f| f.type_ == "warning").count() as f64;
+        let error_count = result
+            .feedback
+            .iter()
+            .filter(|f| f.type_ == "error")
+            .count() as f64;
+        let warning_count = result
+            .feedback
+            .iter()
+            .filter(|f| f.type_ == "warning")
+            .count() as f64;
 
         let mut score = 100.0 - (error_count * 15.0) - (warning_count * 5.0);
         score = score.clamp(0.0, 100.0);
@@ -308,7 +347,8 @@ impl LoopEngine {
         result.completed_at = Some(Utc::now().to_rfc3339());
 
         let has_feedback = !result.feedback.is_empty();
-        let converged = has_feedback && (score >= threshold || (error_count == 0.0 && warning_count == 0.0));
+        let converged =
+            has_feedback && (score >= threshold || (error_count == 0.0 && warning_count == 0.0));
 
         if converged {
             result.status = "converged".into();
@@ -325,7 +365,10 @@ impl LoopEngine {
     pub fn stop(&mut self) -> u32 {
         self.stop_flag.store(true, Ordering::SeqCst);
         let state_guard = lock(&self.state);
-        let iter = state_guard.as_ref().map(|s| s.current_iteration).unwrap_or(0);
+        let iter = state_guard
+            .as_ref()
+            .map(|s| s.current_iteration)
+            .unwrap_or(0);
         iter
     }
 
@@ -334,7 +377,10 @@ impl LoopEngine {
     }
 
     pub fn get_results(&self) -> Vec<IterationResult> {
-        lock(&self.state).as_ref().map(|s| s.history.clone()).unwrap_or_default()
+        lock(&self.state)
+            .as_ref()
+            .map(|s| s.history.clone())
+            .unwrap_or_default()
     }
 
     pub fn update_max_iterations(&mut self, max: u32) {
@@ -390,7 +436,11 @@ fn collect_feedback_with_commands(test_cmd: &str, clippy_cmd: &str) -> Vec<Feedb
 
         entries.push(FeedbackEntry {
             source: "tests".into(),
-            type_: if failed > 0 { "error".into() } else { "success".into() },
+            type_: if failed > 0 {
+                "error".into()
+            } else {
+                "success".into()
+            },
             message: if failed > 0 {
                 format!("{} tests failed, {} passed", failed, passed)
             } else {
@@ -412,7 +462,11 @@ fn collect_feedback_with_commands(test_cmd: &str, clippy_cmd: &str) -> Vec<Feedb
         if warnings > 0 || errors > 0 {
             entries.push(FeedbackEntry {
                 source: "clippy".into(),
-                type_: if errors > 0 { "error".into() } else { "warning".into() },
+                type_: if errors > 0 {
+                    "error".into()
+                } else {
+                    "warning".into()
+                },
                 message: format!("Clippy: {} warnings, {} errors", warnings, errors),
                 details: Some(output),
                 metric: Some(if errors > 0 { 0.0 } else { 100.0 }),
@@ -423,16 +477,26 @@ fn collect_feedback_with_commands(test_cmd: &str, clippy_cmd: &str) -> Vec<Feedb
 
     let cwd = std::env::current_dir().unwrap_or_default();
     let profile_result = crate::profile::ProjectProfile::detect(&cwd);
-    let dep_type = if profile_result.dependency_count > 50 { "error" }
-        else if profile_result.dependency_count > 20 { "warning" }
-        else { "info" };
+    let dep_type = if profile_result.dependency_count > 50 {
+        "error"
+    } else if profile_result.dependency_count > 20 {
+        "warning"
+    } else {
+        "info"
+    };
     entries.push(FeedbackEntry {
         source: "profile".into(),
         type_: dep_type.into(),
-        message: format!("Project: {} | {} deps | {} engine:{}",
-            profile_result.user_type, profile_result.dependency_count,
+        message: format!(
+            "Project: {} | {} deps | {} engine:{}",
+            profile_result.user_type,
+            profile_result.dependency_count,
             profile_result.ecosystem,
-            if profile_result.has_game_engine { "yes" } else { "no" },
+            if profile_result.has_game_engine {
+                "yes"
+            } else {
+                "no"
+            },
         ),
         details: Some(profile_result.summary()),
         metric: Some(profile_result.confidence * 100.0),
@@ -444,7 +508,10 @@ fn collect_feedback_with_commands(test_cmd: &str, clippy_cmd: &str) -> Vec<Feedb
         entries.push(FeedbackEntry {
             source: "license".into(),
             type_: "warning".into(),
-            message: format!("License issues: {} restricted deps", verify_result.license_issues.len()),
+            message: format!(
+                "License issues: {} restricted deps",
+                verify_result.license_issues.len()
+            ),
             details: Some(verify_result.license_issues.join("\n")),
             metric: Some(100.0 - (verify_result.license_issues.len() as f64 * 10.0).min(100.0)),
             threshold: Some(100.0),
@@ -454,7 +521,10 @@ fn collect_feedback_with_commands(test_cmd: &str, clippy_cmd: &str) -> Vec<Feedb
         entries.push(FeedbackEntry {
             source: "versioning".into(),
             type_: "warning".into(),
-            message: format!("Version issues: {} unstable deps", verify_result.version_issues.len()),
+            message: format!(
+                "Version issues: {} unstable deps",
+                verify_result.version_issues.len()
+            ),
             details: Some(verify_result.version_issues.join("\n")),
             metric: Some(100.0 - (verify_result.version_issues.len() as f64 * 5.0).min(100.0)),
             threshold: Some(100.0),
@@ -490,11 +560,13 @@ fn extract_number(output: &str, label: &str) -> u32 {
     // For other labels, compile on demand
     let (re1, re2) = match label {
         "passed" => {
-            static RE: std::sync::OnceLock<(regex::Regex, regex::Regex)> = std::sync::OnceLock::new();
+            static RE: std::sync::OnceLock<(regex::Regex, regex::Regex)> =
+                std::sync::OnceLock::new();
             RE.get_or_init(|| make_extract_regex("passed"))
         }
         "failed" => {
-            static RE: std::sync::OnceLock<(regex::Regex, regex::Regex)> = std::sync::OnceLock::new();
+            static RE: std::sync::OnceLock<(regex::Regex, regex::Regex)> =
+                std::sync::OnceLock::new();
             RE.get_or_init(|| make_extract_regex("failed"))
         }
         _ => return 0,

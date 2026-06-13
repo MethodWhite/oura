@@ -24,7 +24,11 @@ fn check_updates() {
         .output()
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().trim_start_matches("refs/remotes/origin/").to_string())
+        .map(|s| {
+            s.trim()
+                .trim_start_matches("refs/remotes/origin/")
+                .to_string()
+        })
         .unwrap_or_else(|| "main".into());
 
     // Fetch in background so it doesn't block startup
@@ -46,7 +50,10 @@ fn check_updates() {
         .unwrap_or(0);
 
     if behind > 0 {
-        eprintln!("[Oura] Update available: {} commits behind. Run oura_update to upgrade.", behind);
+        eprintln!(
+            "[Oura] Update available: {} commits behind. Run oura_update to upgrade.",
+            behind
+        );
     }
 }
 
@@ -70,7 +77,10 @@ async fn main() -> anyhow::Result<()> {
     }
     check_updates();
 
-    let engine = LoopEngine::new(config.loop_engine.max_iterations, config.loop_engine.convergence_threshold);
+    let engine = LoopEngine::new(
+        config.loop_engine.max_iterations,
+        config.loop_engine.convergence_threshold,
+    );
     let mut server = McpServer::new(engine);
     server.run()?;
 
