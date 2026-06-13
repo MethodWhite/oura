@@ -13,7 +13,7 @@ jobs:
     name: Analyze changes
     runs-on: ubuntu-latest
     outputs:
-          files: ${{ steps.changes.outputs.files }}
+      files: ${{ steps.changes.outputs.files }}
       additions: ${{ steps.changes.outputs.additions }}
       deletions: ${{ steps.changes.outputs.deletions }}
     steps:
@@ -41,12 +41,11 @@ jobs:
         id: conventions
         run: |
           TITLE="${{ github.event.pull_request.title }}"
-          # Conventional commit pattern
-          if echo "$TITLE" | grep -qE '^(feat|fix|refactor|test|docs|ci|config|perf|style|chore|db|mcp)(\([a-z0-9_-]+\))?!?:\s.+'; then
+          if echo "$TITLE" | grep -qE '^(feat|fix|refactor|test|docs|ci|config|perf|style|chore)(\([a-z0-9_-]+\))?!?:\s.+'; then
             echo "title_valid=true" >> "$GITHUB_OUTPUT"
           else
             echo "title_valid=false" >> "$GITHUB_OUTPUT"
-            echo "PR title does not follow Conventional Commits format: $TITLE"
+            echo "title=INVALID" >> "$GITHUB_OUTPUT"
           fi
 
   auto-approve:
