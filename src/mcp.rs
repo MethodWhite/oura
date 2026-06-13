@@ -349,8 +349,8 @@ impl McpServer {
         let args = params.get("arguments").cloned().unwrap_or(json!({}));
 
         match name {
-            "oura_start_loop" => self.cmd_start_loop(id, &args),
-            "oura_iterate" => self.cmd_iterate(id),
+            "oura_start_loop" => self.cmd_start_loop(id, &args).await,
+            "oura_iterate" => self.cmd_iterate(id).await,
             "oura_loop_status" => self.cmd_loop_status(id),
             "oura_loop_stop" => self.cmd_loop_stop(id),
             "oura_results" => self.cmd_results(id, &args),
@@ -1006,8 +1006,8 @@ impl McpServer {
                     .unwrap_or_default()
             }
             "oura://config" => {
-                let max_iter = *self.engine.max_iterations().lock().unwrap();
-                let threshold = *self.engine.convergence_threshold().lock().unwrap();
+                let max_iter = self.engine.max_iterations();
+                let threshold = self.engine.convergence_threshold();
                 let cwd = std::env::current_dir()
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();

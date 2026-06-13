@@ -101,7 +101,8 @@ impl EventLogger {
         loop {
             match self.receiver.recv().await {
                 Ok(event) => {
-                    tracing::info!(event_type = %std::mem::discriminant(&event), "{}", format_event(&event));
+                    let event_type = format!("{:?}", std::mem::discriminant(&event));
+                    tracing::info!(event_type, "{}", format_event(&event));
                 }
                 Err(broadcast::error::RecvError::Closed) => break,
                 Err(broadcast::error::RecvError::Lagged(_)) => continue,
