@@ -1,0 +1,9 @@
+/target
+/dist
+*.swp
+*.swo
+*~
+.DS_Store
+*.log
+.env
+config.toml

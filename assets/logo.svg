@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A0A1A" />
+      <stop offset="100%" stop-color="#1A1A2E" />
+    </linearGradient>
+    <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1" />
+      <stop offset="50%" stop-color="#A78BFA" />
+      <stop offset="100%" stop-color="#818CF8" />
+    </linearGradient>
+    <radialGradient id="eyeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="40%" stop-color="#A78BFA" />
+      <stop offset="100%" stop-color="#6366F1" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="scaleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818CF8" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#6366F1" stop-opacity="0.1" />
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="glowStrong" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="400" height="400" rx="40" fill="url(#bg)" />
+  <path d="M 200 60 A 120 120 0 1 1 80 200 A 120 120 0 0 1 200 60" fill="none" stroke="url(#bodyGrad)" stroke-width="8" stroke-linecap="round" filter="url(#glow)" />
+  <path d="M 200 64 A 116 116 0 1 1 84 200 A 116 116 0 0 1 200 64" fill="none" stroke="#A78BFA" stroke-width="2" stroke-linecap="round" opacity="0.4" />
+  <g opacity="0.25">
+    <polygon points="140,90 148,80 156,90 148,100" fill="url(#scaleGrad)" stroke="#818CF8" stroke-width="0.5" />
+    <polygon points="104,120 112,110 120,120 112,130" fill="url(#scaleGrad)" stroke="#818CF8" stroke-width="0.5" />
+    <polygon points="80,160 88,150 96,160 88,170" fill="url(#scaleGrad)" stroke="#818CF8" stroke-width="0.5" />
+    <polygon points="76,204 84,194 92,204 84,214" fill="url(#scaleGrad)" stroke="#818CF8" stroke-width="0.5" />
+    <polygon points="92,250 100,240 108,250 100,260" fill="url(#scaleGrad)" stroke="#818CF8" stroke-width="0.5" />
+    <polygon points="128,290 136,280 144,290 136,300" fill="url(#scaleGrad)" stroke="#818CF8" stroke-width="0.5" />
+    <polygon points="176,316 184,306 192,316 184,326" fill="url(#scaleGrad)" stroke="#818CF8" stroke-width="0.5" />
+  </g>
+  <g filter="url(#glowStrong)">
+    <path d="M 200 60 C 220 55, 240 60, 250 75 C 260 90, 255 105, 240 110 L 220 115 L 215 100 C 210 85, 200 75, 190 70 Z" fill="url(#bodyGrad)" stroke="#A78BFA" stroke-width="1" />
+    <circle cx="230" cy="78" r="6" fill="url(#eyeGlow)" />
+    <circle cx="230" cy="78" r="2.5" fill="#FFFFFF" />
+    <circle cx="248" cy="82" r="1.5" fill="#312E81" />
+  </g>
+  <path d="M 215 100 L 235 95 C 240 93, 242 97, 238 100 L 220 105" fill="url(#bodyGrad)" opacity="0.6" />
+  <g opacity="0.15" filter="url(#glow)">
+    <path d="M 165 185 C 165 170, 185 170, 200 185 C 215 200, 235 200, 235 185 C 235 170, 215 170, 200 185 C 185 200, 165 200, 165 185" fill="none" stroke="#818CF8" stroke-width="2" />
+  </g>
+  <g fill="#A78BFA" filter="url(#glow)">
+    <circle cx="200" cy="64" r="2" opacity="0.9" />
+    <circle cx="162" cy="72" r="2" opacity="0.7" />
+    <circle cx="128" cy="95" r="2" opacity="0.7" />
+    <circle cx="100" cy="130" r="2" opacity="0.7" />
+    <circle cx="84" cy="170" r="2" opacity="0.7" />
+    <circle cx="84" cy="210" r="2" opacity="0.7" />
+    <circle cx="100" cy="250" r="2" opacity="0.7" />
+    <circle cx="130" cy="286" r="2" opacity="0.7" />
+    <circle cx="172" cy="312" r="2" opacity="0.7" />
+  </g>
+  <g stroke="#818CF8" stroke-width="0.8" fill="none" opacity="0.15">
+    <path d="M 200 64 Q 180 50 162 72" />
+    <path d="M 162 72 Q 140 70 128 95" />
+    <path d="M 128 95 Q 100 100 100 130" />
+    <path d="M 100 130 Q 80 150 84 170" />
+    <path d="M 84 170 Q 70 190 84 210" />
+    <path d="M 84 210 Q 80 235 100 250" />
+    <path d="M 100 250 Q 110 275 130 286" />
+    <path d="M 130 286 Q 150 300 172 312" />
+  </g>
+  <g filter="url(#glow)">
+    <text x="200" y="370" text-anchor="middle" font-family="monospace" font-size="36" font-weight="bold" fill="#818CF8" letter-spacing="6">OURA</text>
+    <text x="200" y="390" text-anchor="middle" font-family="monospace" font-size="10" font-weight="300" fill="#A78BFA" letter-spacing="4" opacity="0.7">LOOP ENGINE</text>
+  </g>
+</svg>

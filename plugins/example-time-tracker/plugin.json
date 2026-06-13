@@ -1,0 +1,19 @@
+{
+  "name": "time-tracker",
+  "version": "0.1.0",
+  "description": "Tracks iteration timing and provides performance metrics",
+  "hooks": [
+    { "event": "pre_iteration", "handler": "start_timer" },
+    { "event": "post_iteration", "handler": "record_duration" }
+  ],
+  "tools": [
+    {
+      "name": "time_stats",
+      "description": "Get timing statistics for all iterations",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ]
+}

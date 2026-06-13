@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "oura": {
+      "type": "stdio",
+      "command": "/home/methodwhite/Proyectos/oura/target/release/oura",
+      "config": {
+        "heartbeat_interval": 30,
+        "auto_save_context": true
+      }
+    }
+  }
+}
