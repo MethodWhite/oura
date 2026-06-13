@@ -4,7 +4,9 @@ use std::fs;
 
 pub struct SecurityAuditor;
 
-const DANGEROUS_PATTERNS: &[(&str, &str, &str, &str, &str, &[&str])] = &[
+type DangerousPattern = (&'static str, &'static str, &'static str, &'static str, &'static str, &'static [&'static str]);
+
+const DANGEROUS_PATTERNS: &[DangerousPattern] = &[
     (
         "command_injection",
         "critical",
@@ -209,5 +211,117 @@ impl AntiDeletionGuard {
 
     pub fn check_integrity(&self) -> Result<String, String> {
         Ok("Integrity check passed: no baseline violations detected (baseline system not yet implemented in Rust version)".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_security_auditor_creation() {
+        let auditor = SecurityAuditor::new();
+        let _ = auditor;
+    }
+
+    #[test]
+    fn test_security_auditor_no_findings() {
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("clean.js");
+        fs::write(&file, "const x = 1;").unwrap();
+        
+        let auditor = SecurityAuditor::new();
+        let findings = auditor.audit(&[file.to_string_lossy().to_string()]);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn test_security_auditor_sql_injection() {
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("test.js");
+        fs::write(&file, "db.execute('SELECT * FROM users')").unwrap();
+        
+        let auditor = SecurityAuditor::new();
+        let findings = auditor.audit(&[file.to_string_lossy().to_string()]);
+        assert!(!findings.is_empty());
+        assert!(findings.iter().any(|f| f.type_ == "sql_injection"));
+    }
+
+    #[test]
+    fn test_security_auditor_xss() {
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("test.js");
+        fs::write(&file, "element.innerHTML = userInput").unwrap();
+        
+        let auditor = SecurityAuditor::new();
+        let findings = auditor.audit(&[file.to_string_lossy().to_string()]);
+        assert!(!findings.is_empty());
+        assert!(findings.iter().any(|f| f.type_ == "xss"));
+    }
+
+    #[test]
+    fn test_security_auditor_nonexistent_file() {
+        let auditor = SecurityAuditor::new();
+        let findings = auditor.audit(&["/nonexistent/file.js".to_string()]);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn test_refactor_engine_creation() {
+        let engine = RefactorEngine::new();
+        let _ = engine;
+    }
+
+    #[test]
+    fn test_refactor_engine_clean_code() {
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("clean.js");
+        fs::write(&file, "const x = 1;").unwrap();
+        
+        let engine = RefactorEngine::new();
+        let (issues, _) = engine.analyze(&file.to_string_lossy());
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn test_refactor_engine_todo_detection() {
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("test.js");
+        fs::write(&file, "// TODO: fix this later").unwrap();
+        
+        let engine = RefactorEngine::new();
+        let (issues, suggestions) = engine.analyze(&file.to_string_lossy());
+        assert!(!issues.is_empty());
+        assert!(issues.iter().any(|i| i.contains("TODO")));
+        assert!(!suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_refactor_engine_long_file() {
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("long.js");
+        let content = "const x = 1;\n".repeat(600);
+        fs::write(&file, content).unwrap();
+        
+        let engine = RefactorEngine::new();
+        let (issues, _) = engine.analyze(&file.to_string_lossy());
+        assert!(issues.iter().any(|i| i.contains("File too long")));
+    }
+
+    #[test]
+    fn test_refactor_engine_nonexistent_file() {
+        let engine = RefactorEngine::new();
+        let (issues, _) = engine.analyze("/nonexistent/file.js");
+        assert!(issues.iter().any(|i| i.contains("Cannot read file")));
+    }
+
+    #[test]
+    fn test_anti_deletion_guard() {
+        let guard = AntiDeletionGuard::new();
+        let result = guard.check_integrity();
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("passed"));
     }
 }

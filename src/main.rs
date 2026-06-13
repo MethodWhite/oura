@@ -1,15 +1,19 @@
 mod agents;
 mod config;
 mod engine;
-mod github;
+mod error;
+mod events;
+mod feedback;
 mod mcp;
 mod profile;
-mod synapsis;
+mod traits;
 mod types;
 
 use config::Config;
 use engine::LoopEngine;
+use events::EventLogger;
 use mcp::McpServer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 fn check_updates() {
     let project = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -17,7 +21,6 @@ fn check_updates() {
         return;
     }
 
-    // Detect default branch
     let head_ref = std::process::Command::new("git")
         .args(["symbolic-ref", "refs/remotes/origin/HEAD"])
         .current_dir(project)
@@ -31,7 +34,6 @@ fn check_updates() {
         })
         .unwrap_or_else(|| "main".into());
 
-    // Fetch in background so it doesn't block startup
     let project_owned = project.to_path_buf();
     std::thread::spawn(move || {
         let _ = std::process::Command::new("git")
@@ -50,40 +52,45 @@ fn check_updates() {
         .unwrap_or(0);
 
     if behind > 0 {
-        eprintln!(
-            "[Oura] Update available: {} commits behind. Run oura_update to upgrade.",
-            behind
+        tracing::warn!(
+            commits_behind = behind,
+            "Update available. Run oura_update to upgrade."
         );
     }
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Signal handling for graceful shutdown - spawn a watcher thread
-    let (sig_tx, sig_rx) = std::sync::mpsc::channel::<()>();
-    std::thread::spawn(move || {
-        // Simple polling approach: try to detect stdin close or signal
-        // In production, use tokio::signal::ctrl_c()
-        let _ = sig_rx.recv();
-        std::process::exit(0);
-    });
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "oura=info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .init();
 
     Config::init().ok();
     let config = Config::load();
 
     let quiet = std::env::var("OURA_QUIET").is_ok() || std::env::var("QUIET").is_ok();
     if !quiet {
-        eprintln!("[Oura] v{} ready (stdio)", env!("CARGO_PKG_VERSION"));
+        tracing::info!(version = env!("CARGO_PKG_VERSION"), "Oura ready (stdio)");
     }
     check_updates();
 
-    let engine = LoopEngine::new(
+    let mut engine = LoopEngine::new(
         config.loop_engine.max_iterations,
         config.loop_engine.convergence_threshold,
     );
-    let mut server = McpServer::new(engine);
-    server.run()?;
 
-    eprintln!("[Oura] Server shut down gracefully");
+    let event_logger = EventLogger::new(engine.event_bus());
+    tokio::spawn(async move {
+        event_logger.run().await;
+    });
+
+    let mut server = McpServer::new(engine);
+    server.run().await?;
+
+    tracing::info!("Oura server shut down gracefully");
     Ok(())
 }

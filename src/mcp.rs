@@ -2,9 +2,9 @@ use crate::agents::*;
 use crate::engine::LoopEngine;
 use crate::types::*;
 use serde_json::{json, Value};
-use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 static MCP_CALL_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -17,56 +17,65 @@ impl McpServer {
         Self { engine }
     }
 
-    pub fn run(&mut self) -> anyhow::Result<()> {
-        let stdin = io::stdin();
-        let stdout = io::stdout();
+    pub async fn run(&mut self) -> anyhow::Result<()> {
+        let stdin = tokio::io::stdin();
+        let mut stdout = tokio::io::stdout();
+        let mut reader = BufReader::new(stdin);
 
-        for line in stdin.lock().lines() {
-            let line = line?;
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
-                Ok(req) => req,
-                Err(e) => {
-                    eprintln!("[Oura MCP] Parse error: {} | Message: '{}'", e, trimmed);
-                    let err_resp = json!({
-                        "jsonrpc": "2.0",
-                        "id": null,
-                        "error": {
-                            "code": -32700,
-                            "message": format!("Parse error: {}", e)
-                        }
-                    });
-                    if let Ok(output) = serde_json::to_string(&err_resp) {
-                        let mut out = stdout.lock();
-                        let _ = writeln!(out, "{}", output);
-                        let _ = out.flush();
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line).await {
+                Ok(0) => break,
+                Ok(_) => {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
                     }
-                    continue;
+
+                    let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
+                        Ok(req) => req,
+                        Err(e) => {
+                            tracing::error!(error = %e, message = %trimmed, "Parse error");
+                            let err_resp = json!({
+                                "jsonrpc": "2.0",
+                                "id": null,
+                                "error": {
+                                    "code": -32700,
+                                    "message": format!("Parse error: {}", e)
+                                }
+                            });
+                            if let Ok(output) = serde_json::to_string(&err_resp) {
+                                let _ = stdout.write_all(output.as_bytes()).await;
+                                let _ = stdout.write_all(b"\n").await;
+                                let _ = stdout.flush().await;
+                            }
+                            continue;
+                        }
+                    };
+
+                    let response = self.handle_request(&request).await;
+
+                    if response.id.is_null() {
+                        continue;
+                    }
+
+                    if let Ok(output) = serde_json::to_string(&response) {
+                        let _ = stdout.write_all(output.as_bytes()).await;
+                        let _ = stdout.write_all(b"\n").await;
+                        let _ = stdout.flush().await;
+                    }
                 }
-            };
-
-            let response = self.handle_request(&request);
-
-            // Don't respond to notifications (JSON-RPC requests with null id)
-            if response.id.is_null() {
-                continue;
-            }
-
-            if let Ok(output) = serde_json::to_string(&response) {
-                let mut out = stdout.lock();
-                let _ = writeln!(out, "{}", output);
-                let _ = out.flush();
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to read line");
+                    break;
+                }
             }
         }
 
         Ok(())
     }
 
-    fn handle_request(&mut self, request: &JsonRpcRequest) -> JsonRpcResponse {
+    async fn handle_request(&mut self, request: &JsonRpcRequest) -> JsonRpcResponse {
         let id = request.id.clone();
 
         match request.method.as_str() {
@@ -78,7 +87,7 @@ impl McpServer {
                 error: None,
             },
             "tools/list" => self.handle_tools_list(id),
-            "tools/call" => self.handle_tools_call(id, request.params.as_ref()),
+            "tools/call" => self.handle_tools_call(id, request.params.as_ref()).await,
             "resources/list" => self.handle_resources_list(id),
             "resources/read" => self.handle_resource_read(id, request.params.as_ref()),
             "prompts/list" => self.handle_prompts_list(id),
@@ -330,7 +339,7 @@ impl McpServer {
         self.ok(id, json!({ "tools": tools }))
     }
 
-    fn handle_tools_call(&mut self, id: Value, params: Option<&Value>) -> JsonRpcResponse {
+    async fn handle_tools_call(&mut self, id: Value, params: Option<&Value>) -> JsonRpcResponse {
         let params = match params {
             Some(p) => p,
             None => return self.err(id, -32602, "Missing params".into()),
@@ -364,12 +373,12 @@ impl McpServer {
         }
     }
 
-    fn cmd_start_loop(&mut self, id: Value, args: &Value) -> JsonRpcResponse {
+    async fn cmd_start_loop(&mut self, id: Value, args: &Value) -> JsonRpcResponse {
         let goal = args["goal"].as_str().unwrap_or("improve codebase");
         let max_iter = args["maxIterations"].as_u64().unwrap_or(20) as u32;
 
         self.engine.update_max_iterations(max_iter);
-        match self.engine.start(goal) {
+        match self.engine.start(goal).await {
             Ok(state) => {
                 let msg = format!(
                     "Loop started: {}\nLoop ID: {}\nStatus: {}",
@@ -377,12 +386,12 @@ impl McpServer {
                 );
                 self.ok(id, json!({ "content": Self::text_content(msg) }))
             }
-            Err(e) => self.err(id, -32603, format!("Failed to start loop: {}", e)),
+            Err(e) => self.err(id, e.code(), format!("Failed to start loop: {}", e)),
         }
     }
 
-    fn cmd_iterate(&mut self, id: Value) -> JsonRpcResponse {
-        match self.engine.iterate() {
+    async fn cmd_iterate(&mut self, id: Value) -> JsonRpcResponse {
+        match self.engine.iterate().await {
             Ok(result) => {
                 let errors = result
                     .feedback
@@ -414,7 +423,7 @@ impl McpServer {
 
                 self.ok(id, json!({ "content": Self::text_content(msg) }))
             }
-            Err(e) => self.err(id, -32603, format!("Iteration failed: {}", e)),
+            Err(e) => self.err(id, e.code(), format!("Iteration failed: {}", e)),
         }
     }
 
@@ -674,7 +683,7 @@ impl McpServer {
         }
 
         let mut entries = collect_entries(root_path, 0, max_depth);
-        entries.sort_by(|a, b| a.1.cmp(&b.1));
+        entries.sort_by_key(|a| a.1);
         for (path_str, depth, is_dir, size) in &entries {
             if *depth == 0 || *depth > max_depth {
                 continue;
@@ -941,7 +950,7 @@ impl McpServer {
         let root = args["path"]
             .as_str()
             .map(Path::new)
-            .unwrap_or_else(|| &std::path::Path::new("."));
+            .unwrap_or_else(|| std::path::Path::new("."));
         let profile = crate::profile::ProjectProfile::detect(root);
         let summary = profile.summary();
 
@@ -968,7 +977,7 @@ impl McpServer {
         let root = args["path"]
             .as_str()
             .map(Path::new)
-            .unwrap_or_else(|| &std::path::Path::new("."));
+            .unwrap_or_else(|| std::path::Path::new("."));
         let report = crate::profile::verify_dependencies(root);
         self.ok(
             id,
@@ -1127,20 +1136,20 @@ impl McpServer {
         };
 
         let mut report = String::new();
-        let mut candidates: Vec<(String, String)> = Vec::new();
-        let mut total_size: u64 = 0;
 
-        cleanup_walk(
-            root_path,
-            &patterns,
-            &dir_patterns,
-            &mut candidates,
-            &mut total_size,
+        let mut ctx = CleanupContext {
+            patterns,
+            dir_patterns: dir_patterns.to_vec(),
+            candidates: Vec::new(),
+            total_size: 0,
             now,
             max_age,
-            0,
-            10,
-        );
+            max_depth: 10,
+        };
+        ctx.walk(root_path, 0);
+
+        let candidates = ctx.candidates;
+        let total_size = ctx.total_size;
 
         if candidates.is_empty() {
             report = format!(
@@ -1384,106 +1393,77 @@ fn collect_entries_inner(
     }
 }
 
-fn cleanup_walk(
-    path: &Path,
-    patterns: &[String],
-    dir_patterns: &[&str],
-    candidates: &mut Vec<(String, String)>,
-    total_size: &mut u64,
+struct CleanupContext {
+    patterns: Vec<String>,
+    dir_patterns: Vec<&'static str>,
+    candidates: Vec<(String, String)>,
+    total_size: u64,
     now: u64,
     max_age: u64,
-    depth: usize,
     max_depth: usize,
-) {
-    let mut visited = std::collections::HashSet::new();
-    cleanup_walk_inner(
-        path,
-        patterns,
-        dir_patterns,
-        candidates,
-        total_size,
-        now,
-        max_age,
-        depth,
-        max_depth,
-        &mut visited,
-    );
 }
 
-fn cleanup_walk_inner(
-    path: &Path,
-    patterns: &[String],
-    dir_patterns: &[&str],
-    candidates: &mut Vec<(String, String)>,
-    total_size: &mut u64,
-    now: u64,
-    max_age: u64,
-    depth: usize,
-    max_depth: usize,
-    visited: &mut std::collections::HashSet<u64>,
-) {
-    if depth > max_depth || !path.is_dir() {
-        return;
+impl CleanupContext {
+    fn walk(&mut self, path: &Path, depth: usize) {
+        let mut visited = std::collections::HashSet::new();
+        self.walk_inner(path, depth, &mut visited);
     }
-    if let Ok(meta) = path.metadata() {
-        #[cfg(unix)]
-        let ino = std::os::unix::fs::MetadataExt::ino(&meta);
-        #[cfg(not(unix))]
-        let ino = 0u64;
-        if ino != 0 && !visited.insert(ino) {
+
+    fn walk_inner(&mut self, path: &Path, depth: usize, visited: &mut std::collections::HashSet<u64>) {
+        if depth > self.max_depth || !path.is_dir() {
             return;
         }
-    }
-    if let Ok(readdir) = std::fs::read_dir(path) {
-        for entry in readdir.flatten() {
-            let p = entry.path();
-            if p.is_symlink() {
-                continue;
+        if let Ok(meta) = path.metadata() {
+            #[cfg(unix)]
+            let ino = std::os::unix::fs::MetadataExt::ino(&meta);
+            #[cfg(not(unix))]
+            let ino = 0u64;
+            if ino != 0 && !visited.insert(ino) {
+                return;
             }
-            let name = p
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
-            if name.starts_with('.') {
-                continue;
-            }
-
-            if p.is_dir() {
-                if dir_patterns.contains(&name.as_str()) {
-                    let size = dir_size(&p).unwrap_or(0);
-                    *total_size += size;
-                    candidates.push((p.to_string_lossy().to_string(), format!("{} dir", name)));
-                } else {
-                    cleanup_walk_inner(
-                        &p,
-                        patterns,
-                        dir_patterns,
-                        candidates,
-                        total_size,
-                        now,
-                        max_age,
-                        depth + 1,
-                        max_depth,
-                        visited,
-                    );
+        }
+        if let Ok(readdir) = std::fs::read_dir(path) {
+            for entry in readdir.flatten() {
+                let p = entry.path();
+                if p.is_symlink() {
+                    continue;
                 }
-            } else {
-                let matched = patterns.iter().any(|pat| {
-                    if let Some(ext) = pat.strip_prefix('*') {
-                        name.ends_with(ext)
+                let name = p
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                if name.starts_with('.') {
+                    continue;
+                }
+
+                if p.is_dir() {
+                    if self.dir_patterns.contains(&name.as_str()) {
+                        let size = dir_size(&p).unwrap_or(0);
+                        self.total_size += size;
+                        self.candidates.push((p.to_string_lossy().to_string(), format!("{} dir", name)));
                     } else {
-                        name == *pat
+                        self.walk_inner(&p, depth + 1, visited);
                     }
-                });
-                if matched {
-                    let size = p.metadata().map(|m| m.len()).unwrap_or(0);
-                    *total_size += size;
-                    let reason = if let Ok(meta) = p.metadata() {
-                        if let Ok(modified) = meta.modified() {
-                            if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
-                                let age_secs = now.saturating_sub(duration.as_secs());
-                                if age_secs > max_age {
-                                    format!("old ({} days)", age_secs / 86400)
+                } else {
+                    let matched = self.patterns.iter().any(|pat| {
+                        if let Some(ext) = pat.strip_prefix('*') {
+                            name.ends_with(ext)
+                        } else {
+                            name == *pat
+                        }
+                    });
+                    if matched {
+                        let size = p.metadata().map(|m| m.len()).unwrap_or(0);
+                        self.total_size += size;
+                        let reason = if let Ok(meta) = p.metadata() {
+                            if let Ok(modified) = meta.modified() {
+                                if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
+                                    let age_secs = self.now.saturating_sub(duration.as_secs());
+                                    if age_secs > self.max_age {
+                                        format!("old ({} days)", age_secs / 86400)
+                                    } else {
+                                        "temp file".into()
+                                    }
                                 } else {
                                     "temp file".into()
                                 }
@@ -1492,11 +1472,9 @@ fn cleanup_walk_inner(
                             }
                         } else {
                             "temp file".into()
-                        }
-                    } else {
-                        "temp file".into()
-                    };
-                    candidates.push((p.to_string_lossy().to_string(), reason));
+                        };
+                        self.candidates.push((p.to_string_lossy().to_string(), reason));
+                    }
                 }
             }
         }

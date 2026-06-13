@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub general: GeneralConfig,
@@ -212,14 +212,80 @@ impl Config {
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            loop_engine: LoopEngineConfig::default(),
-            github: GitHubConfig::default(),
-            synapsis: SynapsisConfig::default(),
-            logging: LoggingConfig::default(),
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert_eq!(config.loop_engine.max_iterations, 20);
+        assert_eq!(config.loop_engine.convergence_threshold, 90.0);
+        assert!(!config.github.enabled);
+        assert!(config.synapsis.enabled);
+    }
+
+    #[test]
+    fn test_general_config_default() {
+        let config = GeneralConfig::default();
+        assert_eq!(config.profile, "default");
+        assert!(config.data_dir.is_none());
+    }
+
+    #[test]
+    fn test_loop_engine_config_default() {
+        let config = LoopEngineConfig::default();
+        assert_eq!(config.max_iterations, 20);
+        assert_eq!(config.convergence_threshold, 90.0);
+        assert_eq!(config.feedback_sources, vec!["test", "lint"]);
+    }
+
+    #[test]
+    fn test_github_config_default() {
+        let config = GitHubConfig::default();
+        assert!(!config.enabled);
+        assert!(!config.auto_commit);
+        assert!(!config.auto_pr);
+        assert_eq!(config.pr_title_prefix, "[Oura] ");
+    }
+
+    #[test]
+    fn test_synapsis_config_default() {
+        let config = SynapsisConfig::default();
+        assert!(config.enabled);
+        assert_eq!(config.endpoint, "http://localhost:7438");
+    }
+
+    #[test]
+    fn test_logging_config_default() {
+        let config = LoggingConfig::default();
+        assert_eq!(config.level, "info");
+        assert_eq!(config.format, "text");
+        assert_eq!(config.output, "stderr");
+    }
+
+    #[test]
+    fn test_config_serialization() {
+        let config = Config::default();
+        let toml_str = toml::to_string(&config).unwrap();
+        assert!(!toml_str.is_empty());
+        
+        let deserialized: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(deserialized.loop_engine.max_iterations, config.loop_engine.max_iterations);
+    }
+
+    #[test]
+    fn test_apply_env_overrides() {
+        std::env::set_var("OURA_MAX_ITERATIONS", "50");
+        std::env::set_var("OURA_CONVERGENCE_THRESHOLD", "95.0");
+        
+        let config = Config::default();
+        let config = Config::apply_env_overrides(config);
+        
+        assert_eq!(config.loop_engine.max_iterations, 50);
+        assert_eq!(config.loop_engine.convergence_threshold, 95.0);
+        
+        std::env::remove_var("OURA_MAX_ITERATIONS");
+        std::env::remove_var("OURA_CONVERGENCE_THRESHOLD");
     }
 }

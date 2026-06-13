@@ -83,14 +83,6 @@ pub struct FeedbackEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConvergenceReport {
-    pub converged: bool,
-    pub score: f64,
-    pub reasons: Vec<String>,
-    pub metrics: std::collections::HashMap<String, f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoopState {
     pub id: String,
     pub goal: String,
@@ -111,36 +103,19 @@ pub struct SecurityAuditEntry {
     pub recommendation: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PluginManifest {
-    pub name: String,
-    pub version: String,
-    pub description: String,
-    pub hooks: Vec<PluginHookDef>,
-    pub tools: Option<Vec<PluginToolDef>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PluginHookDef {
-    pub event: String,
-    pub handler: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PluginToolDef {
-    pub name: String,
-    pub description: String,
-    pub input_schema: serde_json::Value,
-}
-
 // JSON-RPC types for MCP protocol
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
+    #[serde(default = "default_id")]
     pub id: serde_json::Value,
     pub method: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<serde_json::Value>,
+}
+
+fn default_id() -> serde_json::Value {
+    serde_json::Value::Null
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,26 +141,4 @@ pub struct McpToolDefinition {
     pub name: String,
     pub description: String,
     pub input_schema: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpResourceDefinition {
-    pub uri: String,
-    pub name: String,
-    pub description: String,
-    pub mime_type: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpPromptDefinition {
-    pub name: String,
-    pub description: String,
-    pub arguments: Vec<McpPromptArg>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpPromptArg {
-    pub name: String,
-    pub description: String,
-    pub required: bool,
 }

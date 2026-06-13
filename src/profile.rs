@@ -227,7 +227,7 @@ impl ProjectProfile {
             0.9
         } else if indicators.len() >= 2 {
             0.7
-        } else if indicators.len() >= 1 {
+        } else if !indicators.is_empty() {
             0.5
         } else {
             0.3
@@ -558,23 +558,9 @@ struct LicenseCheckResult {
 fn check_cargo_licenses(root: &Path) -> LicenseCheckResult {
     let mut deps = Vec::new();
     let mut license_issues = Vec::new();
-    let mut version_issues = Vec::new();
+    let version_issues = Vec::new();
 
     let restricted = ["BUSL-1.1", "BSL-1.1", "AGPL-3.0", "SSPL-1.0", "Elastic-2.0"];
-    let preferred = [
-        "MIT",
-        "Apache-2.0",
-        "BSD-2-Clause",
-        "BSD-3-Clause",
-        "ISC",
-        "Unlicense",
-        "CC0-1.0",
-        "MPL-2.0",
-        "LGPL-2.1",
-        "LGPL-3.0",
-        "Zlib",
-        "BlueOak-1.0.0",
-    ];
 
     let cargo_lock = root.join("Cargo.lock");
     if let Ok(content) = std::fs::read_to_string(&cargo_lock) {
@@ -665,7 +651,7 @@ fn check_node_licenses(root: &Path) -> LicenseCheckResult {
                     });
                     if ver
                         .as_str()
-                        .map_or(false, |v| v.starts_with("0.") || v == "*")
+                        .is_some_and(|v| v.starts_with("0.") || v == "*")
                     {
                         version_issues.push(format!("{}: unstable version ({})", name, ver));
                     }
@@ -742,4 +728,110 @@ fn read_first_n_chars(path: std::path::PathBuf, n: usize) -> std::io::Result<Str
     let bytes_read = file.read(&mut buf)?;
     buf.truncate(bytes_read);
     Ok(String::from_utf8_lossy(&buf).to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_detect_rust_project() {
+        let temp = TempDir::new().unwrap();
+        let cargo_toml = temp.path().join("Cargo.toml");
+        fs::write(&cargo_toml, "[package]\nname = \"test\"\n[dependencies]\nserde = \"1.0\"").unwrap();
+        
+        let profile = ProjectProfile::detect(temp.path());
+        assert_eq!(profile.ecosystem, "rust");
+        assert_eq!(profile.dependency_count, 1);
+    }
+
+    #[test]
+    fn test_detect_node_project() {
+        let temp = TempDir::new().unwrap();
+        let package_json = temp.path().join("package.json");
+        fs::write(&package_json, r#"{"dependencies": {"express": "4.18.0"}}"#).unwrap();
+        
+        let profile = ProjectProfile::detect(temp.path());
+        assert_eq!(profile.ecosystem, "node");
+        assert_eq!(profile.dependency_count, 1);
+    }
+
+    #[test]
+    fn test_detect_game_engine() {
+        let temp = TempDir::new().unwrap();
+        let cargo_toml = temp.path().join("Cargo.toml");
+        fs::write(&cargo_toml, "[dependencies]\nbevy = \"0.12\"").unwrap();
+        
+        let profile = ProjectProfile::detect(temp.path());
+        assert!(profile.has_game_engine);
+        assert!(profile.indicators.iter().any(|i| i.contains("game-engine")));
+    }
+
+    #[test]
+    fn test_classify_empty() {
+        let result = classify(false, false, &[]);
+        assert_eq!(result, "unknown");
+    }
+
+    #[test]
+    fn test_classify_enterprise() {
+        let indicators = vec!["enterprise-config: saml".to_string()];
+        let result = classify(true, false, &indicators);
+        assert_eq!(result, "enterprise");
+    }
+
+    #[test]
+    fn test_classify_game_dev() {
+        let indicators = vec!["game-engine: rust".to_string()];
+        let result = classify(false, false, &indicators);
+        assert_eq!(result, "indie");
+    }
+
+    #[test]
+    fn test_count_cargo_deps() {
+        let temp = TempDir::new().unwrap();
+        let cargo_toml = temp.path().join("Cargo.toml");
+        fs::write(&cargo_toml, "[dependencies]\nserde = \"1.0\"\ntokio = \"1.0\"\n[dev-dependencies]\ntempfile = \"3.0\"").unwrap();
+        
+        let count = count_cargo_deps(temp.path());
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn test_count_json_deps() {
+        let temp = TempDir::new().unwrap();
+        let package_json = temp.path().join("package.json");
+        fs::write(&package_json, r#"{"dependencies": {"express": "4.18.0"}, "devDependencies": {"jest": "29.0.0"}}"#).unwrap();
+        
+        let count = count_json_deps(temp.path(), "package.json");
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn test_verify_dependencies_empty() {
+        let temp = TempDir::new().unwrap();
+        let report = verify_dependencies(temp.path());
+        assert!(report.license_issues.is_empty());
+        assert!(report.version_issues.is_empty());
+    }
+
+    #[test]
+    fn test_profile_summary() {
+        let profile = ProjectProfile {
+            user_type: "indie".to_string(),
+            confidence: 0.8,
+            indicators: vec!["test".to_string()],
+            ecosystem: "rust".to_string(),
+            has_game_engine: false,
+            has_paid_tools: false,
+            has_enterprise_configs: false,
+            dependency_count: 5,
+        };
+        
+        let summary = profile.summary();
+        assert!(summary.contains("indie"));
+        assert!(summary.contains("rust"));
+    }
 }

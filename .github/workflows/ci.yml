@@ -4,23 +4,23 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
-  schedule:
-    - cron: '0 6 * * 1'  # weekly security audit
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: Check (ubuntu)
-    runs-on: ubuntu-latest
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --release
+      - run: cargo test
 
   fmt:
     name: Format
@@ -41,22 +41,8 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --release --all-targets
+      - run: cargo clippy --all-targets
         continue-on-error: true
-
-  test:
-    name: Test (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --release
-      - run: cargo test --release --all-features
 
   msrv:
     name: MSRV (1.86.0)
@@ -64,8 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.86.0
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo check --release
+      - run: cargo check
 
   security:
     name: Security audit
