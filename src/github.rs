@@ -199,12 +199,16 @@ impl GitHubClient {
     pub async fn auto_commit_and_push(&self, repo: &RepoConfig, message: &str, files: &[String]) -> anyhow::Result<()> {
         let work_dir = std::env::temp_dir().join(format!("oura-{}-{}", repo.owner, repo.repo));
 
-        // Clone if needed
+        // Clone using token via temporary .git-credentials file (avoids process table exposure)
         if !work_dir.join(".git").exists() {
-            let clone_url = format!("https://x-access-token:{}@github.com/{}/{}.git", self.token, repo.owner, repo.repo);
+            let cred_path = work_dir.join(".git-credentials");
+            std::fs::write(&cred_path, format!("https://x-access-token:{}@github.com", self.token))?;
+            let clone_url = format!("https://github.com/{}/{}.git", repo.owner, repo.repo);
             let status = Command::new("git")
                 .args(["clone", "--depth=1", &clone_url, work_dir.to_str().unwrap()])
+                .env("GIT_CREDENTIAL_HELPER", &format!("store --file {}", cred_path.display()))
                 .status()?;
+            let _ = std::fs::remove_file(&cred_path);
             if !status.success() {
                 anyhow::bail!("Failed to clone repo");
             }

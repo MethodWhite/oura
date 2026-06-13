@@ -1,0 +1,107 @@
+name: PR Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+
+jobs:
+  analyze:
+    name: Analyze changes
+    runs-on: ubuntu-latest
+    outputs:
+          files: ${{ steps.changes.outputs.files }}
+      additions: ${{ steps.changes.outputs.additions }}
+      deletions: ${{ steps.changes.outputs.deletions }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Analyze PR changes
+        id: changes
+        run: |
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
+          ADDITIONS=$(git diff --numstat origin/${{ github.base_ref }}...HEAD | awk '{s+=$1} END {print s+0}')
+          DELETIONS=$(git diff --numstat origin/${{ github.base_ref }}...HEAD | awk '{s+=$2} END {print s+0}')
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          echo "additions=$ADDITIONS" >> "$GITHUB_OUTPUT"
+          echo "deletions=$DELETIONS" >> "$GITHUB_OUTPUT"
+
+  check-conventions:
+    name: Check conventions
+    runs-on: ubuntu-latest
+    outputs:
+      title_valid: ${{ steps.conventions.outputs.title_valid }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate PR title
+        id: conventions
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          # Conventional commit pattern
+          if echo "$TITLE" | grep -qE '^(feat|fix|refactor|test|docs|ci|config|perf|style|chore|db|mcp)(\([a-z0-9_-]+\))?!?:\s.+'; then
+            echo "title_valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "title_valid=false" >> "$GITHUB_OUTPUT"
+            echo "PR title does not follow Conventional Commits format: $TITLE"
+          fi
+
+  auto-approve:
+    name: Auto-approve
+    needs: [analyze, check-conventions]
+    if: >
+      github.event.pull_request.draft == false &&
+      !contains(github.event.pull_request.labels.*.name, 'breaking') &&
+      !contains(github.event.pull_request.labels.*.name, 'blocked') &&
+      needs.analyze.outputs.additions < 500 &&
+      needs.analyze.outputs.files < 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI checks
+        uses: poseidon/wait-for-status-checks@v0.5.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ignore: 'PR Review,Analyze changes,Check conventions'
+          timeout: 600
+
+      - name: Auto-approve
+        uses: hmarr/auto-approve-action@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add approved label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map(l => l.name);
+            if (!labels.includes('auto-approved')) {
+              github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: ['auto-approved']
+              });
+            }
+
+  enforce-labels:
+    name: Enforce labels
+    runs-on: ubuntu-latest
+    if: github.event.action == 'opened' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
+    steps:
+      - name: Check required labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const labels = pr.labels.map(l => l.name);
+            const hasType = labels.some(l => ['feat','fix','refactor','test','docs','ci','config','perf','chore'].includes(l));
+            const hasSize = labels.some(l => ['size/XS','size/S','size/M','size/L','size/XL'].includes(l));
+            if (!hasType) {
+              core.warning('PR is missing a type label (feat, fix, refactor, etc.)');
+            }
+            if (!hasSize) {
+              core.warning('PR is missing a size label (size/XS, size/S, etc.)');
+            }

@@ -1,8 +1,12 @@
 use std::io::{self, BufRead, Write};
+use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use serde_json::{json, Value};
 use crate::types::*;
 use crate::engine::LoopEngine;
 use crate::agents::*;
+
+static MCP_CALL_ID: AtomicU64 = AtomicU64::new(1);
 
 pub struct McpServer {
     engine: LoopEngine,
@@ -19,16 +23,44 @@ impl McpServer {
 
         for line in stdin.lock().lines() {
             let line = line?;
-            if line.trim().is_empty() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
                 continue;
             }
 
-            let request: JsonRpcRequest = serde_json::from_str(&line)?;
+            let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
+                Ok(req) => req,
+                Err(e) => {
+                    eprintln!("[Oura MCP] Parse error: {} | Message: '{}'", e, trimmed);
+                    let err_resp = json!({
+                        "jsonrpc": "2.0",
+                        "id": null,
+                        "error": {
+                            "code": -32700,
+                            "message": format!("Parse error: {}", e)
+                        }
+                    });
+                    if let Ok(output) = serde_json::to_string(&err_resp) {
+                        let mut out = stdout.lock();
+                        let _ = writeln!(out, "{}", output);
+                        let _ = out.flush();
+                    }
+                    continue;
+                }
+            };
+
             let response = self.handle_request(&request);
 
-            let output = serde_json::to_string(&response)?;
-            writeln!(stdout.lock(), "{}", output)?;
-            stdout.lock().flush()?;
+            // Don't respond to notifications (JSON-RPC requests with null id)
+            if response.id.is_null() {
+                continue;
+            }
+
+            if let Ok(output) = serde_json::to_string(&response) {
+                let mut out = stdout.lock();
+                let _ = writeln!(out, "{}", output);
+                let _ = out.flush();
+            }
         }
 
         Ok(())
@@ -39,7 +71,7 @@ impl McpServer {
 
         match request.method.as_str() {
             "initialize" => self.handle_initialize(id),
-            "initialized" => self.ok(id, json!({})),
+            "initialized" => JsonRpcResponse { jsonrpc: "2.0".into(), id, result: None, error: None },
             "tools/list" => self.handle_tools_list(id),
             "tools/call" => self.handle_tools_call(id, request.params.as_ref()),
             "resources/list" => self.handle_resources_list(id),
@@ -84,7 +116,7 @@ impl McpServer {
                 "resources": { "listChanged": true },
                 "prompts": { "listChanged": true }
             },
-            "serverInfo": { "name": "oura", "version": "0.1.0" }
+            "serverInfo": { "name": "oura", "version": env!("CARGO_PKG_VERSION") }
         }))
     }
 
@@ -190,6 +222,92 @@ impl McpServer {
                     }
                 }),
             },
+            McpToolDefinition {
+                name: "oura_analyze_project".into(),
+                description: "Scan project directory structure, docs, configs and sizes. Token-efficient project analysis for organization decisions.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Project root path (default: current dir)" },
+                        "depth": { "type": "number", "description": "Max directory depth (default: 4)", "default": 4 }
+                    }
+                }),
+            },
+            McpToolDefinition {
+                name: "oura_cleanup".into(),
+                description: "Scan and clean temp files, build artifacts, old logs. Safe dry-run by default.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Root path to scan (default: current dir)" },
+                        "dry_run": { "type": "boolean", "description": "Only report, don't delete (default: true)", "default": true },
+                        "older_than_days": { "type": "number", "description": "Only touch files older than N days (default: 30)", "default": 30 },
+                        "patterns": { "type": "array", "items": { "type": "string" }, "description": "File patterns to match (e.g. *.tmp, *.log)" }
+                    }
+                }),
+            },
+            McpToolDefinition {
+                name: "mcp_call".into(),
+                description: "Call a tool on another MCP server. Lets sub-orchestrators dispatch to any MCP tool via HTTP.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "server_url": { "type": "string", "description": "Base URL of target MCP server (e.g. http://localhost:7438)" },
+                        "tool_name": { "type": "string", "description": "Name of the tool to call" },
+                        "arguments": { "type": "object", "description": "Arguments for the tool", "default": {} },
+                        "endpoint": { "type": "string", "description": "Custom endpoint path (default: /message)", "default": "/message" }
+                    },
+                    "required": ["server_url", "tool_name"]
+                }),
+            },
+            McpToolDefinition {
+                name: "oura_version".into(),
+                description: "Show Oura version, build info, and latest available version.".into(),
+                input_schema: json!({ "type": "object", "properties": {} }),
+            },
+            McpToolDefinition {
+                name: "oura_update".into(),
+                description: "Check for updates and optionally rebuild Oura from source via git pull + cargo build.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "apply": { "type": "boolean", "description": "Actually pull and rebuild (default: false = dry-run check)", "default": false }
+                    }
+                }),
+            },
+            McpToolDefinition {
+                name: "oura_profile".into(),
+                description: "Detect project profile: indie, studio, enterprise, game-dev, ai-ml, etc. Lightweight analysis, no telemetry.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Project path (default: current dir)" }
+                    }
+                }),
+            },
+            McpToolDefinition {
+                name: "oura_verify".into(),
+                description: "Verify dependency licenses, versions, and project profile. Checks Cargo.toml, package.json, Cargo.lock.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Project path (default: current dir)" },
+                        "check_licenses": { "type": "boolean", "description": "Check dependency licenses (default: true)", "default": true },
+                        "check_versions": { "type": "boolean", "description": "Check version stability (default: true)", "default": true }
+                    }
+                }),
+            },
+            McpToolDefinition {
+                name: "oura_working_dir".into(),
+                description: "Set the working directory for Oura commands (test, clippy, project analysis).".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "directory": { "type": "string", "description": "Absolute path to the working directory" }
+                    },
+                    "required": ["directory"]
+                }),
+            },
         ];
 
         self.ok(id, json!({ "tools": tools }))
@@ -217,6 +335,14 @@ impl McpServer {
             "oura_analyze_code" => self.cmd_analyze_code(id, &args),
             "oura_check_integrity" => self.cmd_check_integrity(id),
             "oura_guard_destructive" => self.cmd_guard_destructive(id, &args),
+            "oura_analyze_project" => self.cmd_analyze_project(id, &args),
+            "oura_cleanup" => self.cmd_cleanup(id, &args),
+            "mcp_call" => self.cmd_mcp_call(id, &args),
+            "oura_version" => self.cmd_version(id),
+            "oura_update" => self.cmd_update(id, &args),
+            "oura_profile" => self.cmd_profile(id, &args),
+            "oura_verify" => self.cmd_verify(id, &args),
+            "oura_working_dir" => self.cmd_working_dir(id, &args),
             _ => self.err(id, -32602, format!("Unknown tool: {}", name)),
         }
     }
@@ -290,11 +416,12 @@ impl McpServer {
     fn cmd_results(&self, id: Value, args: &Value) -> JsonRpcResponse {
         let results = self.engine.get_results();
         let iter_filter = args["iteration"].as_u64().unwrap_or(0);
+        let max_iterations = 20;
 
         let filtered: Vec<&IterationResult> = if iter_filter > 0 {
             results.iter().filter(|r| r.iteration == iter_filter as u32).collect()
         } else {
-            results.iter().collect()
+            results.iter().rev().take(max_iterations).collect()
         };
 
         let summary: Vec<serde_json::Value> = filtered.iter().map(|r| {
@@ -325,7 +452,23 @@ impl McpServer {
         if let Some(threshold) = args["convergenceThreshold"].as_f64() {
             self.engine.update_convergence_threshold(threshold);
         }
+        if let Some(dir) = args["workingDirectory"].as_str() {
+            let path = std::path::Path::new(dir);
+            if path.exists() {
+                std::env::set_current_dir(path).ok();
+            }
+        }
         self.ok(id, json!({ "content": Self::text_content("Configuration updated".into()) }))
+    }
+
+    fn cmd_working_dir(&self, id: Value, args: &Value) -> JsonRpcResponse {
+        let dir = args["directory"].as_str().unwrap_or(".");
+        let path = std::path::Path::new(dir);
+        if !path.exists() {
+            return self.err(id, -32602, format!("Directory not found: {}", dir));
+        }
+        std::env::set_current_dir(path).ok();
+        self.ok(id, json!({ "content": Self::text_content(format!("Working directory set to: {}", dir)) }))
     }
 
     fn cmd_plugin_load(&mut self, id: Value, _args: &Value) -> JsonRpcResponse {
@@ -416,6 +559,289 @@ impl McpServer {
         }))
     }
 
+    fn cmd_analyze_project(&self, id: Value, args: &Value) -> JsonRpcResponse {
+        let root = args["path"].as_str().unwrap_or(".");
+        let max_depth = args["depth"].as_u64().unwrap_or(4) as usize;
+
+        let root_path = Path::new(root);
+        if !root_path.exists() {
+            return self.err(id, -32602, format!("Path not found: {}", root));
+        }
+
+        let mut report = String::new();
+        report.push_str(&format!("[{}] ({})\n", root_path.file_name().map(|n| n.to_string_lossy()).unwrap_or_else(|| "?".into()), root));
+        report.push_str(&format!("   Size: {}\n", format_size(dir_size(root_path).unwrap_or(0))));
+
+        let readme = find_readme(root_path);
+        if let Some(rm) = readme {
+            if let Ok(content) = std::fs::read_to_string(&rm) {
+                let preview: String = content.lines().take(8).collect::<Vec<_>>().join("\n");
+                report.push_str(&format!("   README: {} chars\n{}\n", content.len(), preview));
+            }
+        }
+
+        let docs_dir = root_path.join("docs");
+        if docs_dir.exists() && docs_dir.is_dir() {
+            let count = std::fs::read_dir(&docs_dir).map(|e| e.count()).unwrap_or(0);
+            report.push_str(&format!("   docs/: {} files\n", count));
+        }
+
+        let configs = scan_configs(root_path);
+        if !configs.is_empty() {
+            report.push_str(&format!("   Config: {}\n", configs.join(", ")));
+        }
+
+        let mut entries = collect_entries(root_path, 0, max_depth);
+        entries.sort_by(|a, b| a.1.cmp(&b.1));
+        for (path_str, depth, is_dir, size) in &entries {
+            if *depth == 0 || *depth > max_depth { continue; }
+            let indent = "  ".repeat(*depth);
+            let marker = if *is_dir { "+" } else { " " };
+            let size_str = if *is_dir { String::new() } else { format!(" ({})", format_size(*size)) };
+            report.push_str(&format!("{}{} {}{}\n", indent, marker, path_str, size_str));
+        }
+
+        let large: Vec<_> = entries.iter().filter(|(_, _, is_dir, size)| !is_dir && *size > 100_000).collect();
+        if !large.is_empty() {
+            report.push_str(&format!("\n   Large files (>100KB): {}\n", large.len()));
+            for (path_str, _, _, size) in large.iter().take(5) {
+                report.push_str(&format!("     - {} ({})\n", path_str, format_size(*size)));
+            }
+        }
+
+        let total_files = entries.iter().filter(|(_, _, is_dir, _)| !is_dir).count();
+        let total_dirs = entries.iter().filter(|(_, _, is_dir, _)| *is_dir).count();
+        report.push_str(&format!("\n   Summary: {} dirs, {} files", total_dirs, total_files));
+
+        self.ok(id, json!({ "content": Self::text_content(report) }))
+    }
+
+    fn cmd_mcp_call(&self, id: Value, args: &Value) -> JsonRpcResponse {
+        let server_url = args["server_url"].as_str().unwrap_or("").trim_end_matches('/');
+        let tool_name = args["tool_name"].as_str().unwrap_or("");
+        let tool_args = args.get("arguments").cloned().unwrap_or(json!({}));
+        let endpoint = args["endpoint"].as_str().unwrap_or("/message");
+
+        if server_url.is_empty() || tool_name.is_empty() {
+            return self.err(id, -32602, "server_url and tool_name are required".into());
+        }
+
+        let call_id = MCP_CALL_ID.fetch_add(1, Ordering::SeqCst);
+        let request_body = json!({
+            "jsonrpc": "2.0",
+            "id": call_id,
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": tool_args
+            }
+        });
+
+        let url = format!("{}{}", server_url, endpoint);
+        match Self::http_post(&url, &request_body) {
+            Ok(response_text) => {
+                self.ok(id, json!({ "content": Self::text_content(response_text) }))
+            }
+            Err(e) => {
+                self.ok(id, json!({ "content": Self::text_content(format!("MCP call failed: {}", e)) }))
+            }
+        }
+    }
+
+    fn http_post(url: &str, body: &Value) -> Result<String, String> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let url = url.to_string();
+        let body = body.clone();
+        std::thread::spawn(move || {
+            let client = reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .map_err(|e| e.to_string());
+            match client {
+                Ok(c) => {
+                    let resp = c.post(&url).json(&body).send().map_err(|e| e.to_string());
+                    match resp {
+                        Ok(r) => { let _ = tx.send(r.text().map_err(|e| e.to_string())); }
+                        Err(e) => { let _ = tx.send(Err(e)); }
+                    }
+                }
+                Err(e) => { let _ = tx.send(Err(e)); }
+            }
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(35))
+            .map_err(|_| "HTTP request timed out".to_string())?
+    }
+
+    fn cmd_version(&self, id: Value) -> JsonRpcResponse {
+        let version = env!("CARGO_PKG_VERSION");
+
+        let build_ts = option_env!("BUILD_TIME").unwrap_or("0");
+        let build_date = {
+            let secs: u64 = build_ts.parse().unwrap_or(0);
+            if secs > 0 {
+                let naive = chrono::DateTime::from_timestamp(secs as i64, 0)
+                    .map(|dt| dt.format("%Y-%m").to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                naive
+            } else {
+                "unknown".to_string()
+            }
+        };
+        let git_head = option_env!("GIT_HEAD").unwrap_or("unknown");
+        let project_dir = env!("CARGO_MANIFEST_DIR");
+
+        let out = format!(
+            "Oura v{}\nBuilt: {}\nCommit: {}\nProject: {}",
+            version, build_date, git_head, project_dir
+        );
+
+        self.ok(id, json!({ "content": Self::text_content(out) }))
+    }
+
+    fn cmd_update(&self, id: Value, args: &Value) -> JsonRpcResponse {
+        let apply = args["apply"].as_bool().unwrap_or(false);
+        let project_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+
+        if !project_dir.join(".git").exists() {
+            return self.ok(id, json!({
+                "content": Self::text_content("Not a git repository. Can't auto-update.".into())
+            }));
+        }
+
+        // Detect default branch
+        let default_branch = std::process::Command::new("git")
+            .args(["symbolic-ref", "refs/remotes/origin/HEAD"])
+            .current_dir(project_dir)
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().trim_start_matches("refs/remotes/origin/").to_string())
+            .unwrap_or_else(|| "main".into());
+
+        let mut report = String::new();
+        report.push_str(&format!("Oura v{} - checking for updates...\n", env!("CARGO_PKG_VERSION")));
+
+        let git_fetch = run_command_timeout(&["git", "fetch", "--quiet"], project_dir, 30);
+
+        match git_fetch {
+            Ok(output) if output.status.success() => {
+                report.push_str("Git fetch OK.\n");
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                report.push_str(&format!("Git fetch: {}\n", stderr));
+                return self.ok(id, json!({ "content": Self::text_content(report) }));
+            }
+            Err(e) => {
+                report.push_str(&format!("Git fetch failed: {}\n", e));
+                return self.ok(id, json!({ "content": Self::text_content(report) }));
+            }
+        }
+
+        let remote_ref = format!("HEAD..origin/{}", default_branch);
+        let ahead = std::process::Command::new("git")
+            .args(["rev-list", "--count", &remote_ref])
+            .current_dir(project_dir)
+            .output();
+
+        let commits_behind = match ahead {
+            Ok(output) => {
+                String::from_utf8_lossy(&output.stdout).trim().to_string()
+            }
+            Err(_) => "?".to_string(),
+        };
+
+        let local_hash = std::process::Command::new("git")
+            .args(["rev-parse", "--short", "HEAD"])
+            .current_dir(project_dir)
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| "?".into());
+
+        let remote_hash = std::process::Command::new("git")
+            .args(["rev-parse", "--short", &format!("origin/{}", default_branch)])
+            .current_dir(project_dir)
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| "?".into());
+
+        report.push_str(&format!("Local: v{} @{}\nRemote: @{}\nBehind: {} commits\n",
+            env!("CARGO_PKG_VERSION"), local_hash, remote_hash, commits_behind));
+
+        let behind_count: i32 = commits_behind.parse().unwrap_or(0);
+
+        if behind_count <= 0 {
+            report.push_str("\nAlready up to date. No update needed.");
+        } else if apply {
+            let pull = run_command_timeout(&["git", "pull", "--rebase"], project_dir, 60);
+
+            match pull {
+                Ok(output) if output.status.success() => {
+                    report.push_str("\nGit pull OK. Rebuilding...");
+                    let build = run_command_timeout(&["cargo", "build", "--release"], project_dir, 300);
+
+                    match build {
+                        Ok(b) if b.status.success() => {
+                            report.push_str(" Build OK! Restart Oura to use the new version.");
+                        }
+                        Ok(b) => {
+                            let stderr = String::from_utf8_lossy(&b.stderr);
+                            report.push_str(&format!(" Build failed:\n{}", stderr));
+                        }
+                        Err(e) => {
+                            report.push_str(&format!(" Build error: {}", e));
+                        }
+                    }
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    report.push_str(&format!("\nGit pull failed:\n{}", stderr));
+                }
+                Err(e) => {
+                    report.push_str(&format!("\nGit pull error: {}", e));
+                }
+            }
+        } else {
+            report.push_str(&format!("\n{} commits behind. Run oura_update with apply=true to update.", behind_count));
+        }
+
+        self.ok(id, json!({ "content": Self::text_content(report) }))
+    }
+
+    fn cmd_profile(&self, id: Value, args: &Value) -> JsonRpcResponse {
+        let root = args["path"].as_str().map(Path::new).unwrap_or_else(|| {
+            &std::path::Path::new(".")
+        });
+        let profile = crate::profile::ProjectProfile::detect(root);
+        let summary = profile.summary();
+
+        let json_output = serde_json::json!({
+            "user_type": profile.user_type,
+            "confidence": profile.confidence,
+            "ecosystem": profile.ecosystem,
+            "has_game_engine": profile.has_game_engine,
+            "has_paid_tools": profile.has_paid_tools,
+            "has_enterprise_configs": profile.has_enterprise_configs,
+            "dependency_count": profile.dependency_count,
+            "indicators": profile.indicators,
+        });
+
+        let report = format!("{}\n\n---\n{}", summary, serde_json::to_string_pretty(&json_output).unwrap_or_default());
+        self.ok(id, json!({ "content": Self::text_content(report) }))
+    }
+
+    fn cmd_verify(&self, id: Value, args: &Value) -> JsonRpcResponse {
+        let root = args["path"].as_str().map(Path::new).unwrap_or_else(|| {
+            &std::path::Path::new(".")
+        });
+        let report = crate::profile::verify_dependencies(root);
+        self.ok(id, json!({ "content": Self::text_content(report.summary()) }))
+    }
+
     fn handle_resources_list(&self, id: Value) -> JsonRpcResponse {
         self.ok(id, json!({
             "resources": [
@@ -435,9 +861,17 @@ impl McpServer {
             "oura://results" => serde_json::to_string_pretty(
                 &state.map(|s| s.history.clone()).unwrap_or_default()
             ).unwrap_or_default(),
-            "oura://config" => serde_json::to_string_pretty(
-                &state.map(|s| s.config.clone()).unwrap_or_default()
-            ).unwrap_or_default(),
+            "oura://config" => {
+                let max_iter = *self.engine.max_iterations().lock().unwrap();
+                let threshold = *self.engine.convergence_threshold().lock().unwrap();
+                let cwd = std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                let config_json = json!({
+                    "max_iterations": max_iter,
+                    "convergence_threshold": threshold,
+                    "working_directory": cwd,
+                });
+                serde_json::to_string_pretty(&config_json).unwrap_or_default()
+            }
             _ => return self.err(id, -32602, format!("Unknown resource: {}", uri)),
         };
 
@@ -507,6 +941,292 @@ impl McpServer {
                 }))
             }
             _ => self.err(id, -32602, format!("Unknown prompt: {}", name)),
+        }
+    }
+
+    fn cmd_cleanup(&self, id: Value, args: &Value) -> JsonRpcResponse {
+        let root = args["path"].as_str().unwrap_or(".");
+        let dry_run = args["dry_run"].as_bool().unwrap_or(true);
+        let older_than = args["older_than_days"].as_u64().unwrap_or(30);
+        let patterns: Vec<String> = args["patterns"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_else(|| vec![
+                "*.tmp".into(), "*.temp".into(), "*.log".into(), "*.bak".into(),
+                "*.swp".into(), "*.swo".into(), "*.pyc".into(), "__pycache__".into(),
+                ".DS_Store".into(), "Thumbs.db".into(),
+            ]);
+        let dir_patterns = ["node_modules", ".next", ".turbo", "dist", "build", ".cache"];
+
+        let root_path = Path::new(root);
+        if !root_path.exists() {
+            return self.err(id, -32602, format!("Path not found: {}", root));
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let max_age = if older_than > 0 { older_than * 86400 } else { u64::MAX };
+
+        let mut report = String::new();
+        let mut candidates: Vec<(String, String)> = Vec::new();
+        let mut total_size: u64 = 0;
+
+        cleanup_walk(root_path, &patterns, &dir_patterns, &mut candidates, &mut total_size, now, max_age, 0, 10);
+
+        if candidates.is_empty() {
+            report = format!("No cleanup candidates found in {}. Everything looks clean.", root);
+        } else {
+            report.push_str(&format!("Cleanup candidates in {}:\n", root));
+            for (path, reason) in &candidates {
+                report.push_str(&format!("  - {} ({})\n", path, reason));
+            }
+            report.push_str(&format!("\nTotal: {} items, {}\n", candidates.len(), format_size(total_size)));
+
+            if !dry_run {
+                let mut deleted = 0;
+                let mut failed = 0;
+                for (path, _) in &candidates {
+                    let p = Path::new(path);
+                    if p.is_dir() {
+                        match std::fs::remove_dir_all(p) {
+                            Ok(_) => deleted += 1,
+                            Err(e) => {
+                                report.push_str(&format!("  FAILED: {}: {}\n", path, e));
+                                failed += 1;
+                            }
+                        }
+                    } else {
+                        match std::fs::remove_file(p) {
+                            Ok(_) => deleted += 1,
+                            Err(e) => {
+                                report.push_str(&format!("  FAILED: {}: {}\n", path, e));
+                                failed += 1;
+                            }
+                        }
+                    }
+                }
+                report.push_str(&format!("\nDeleted: {}, Failed: {}", deleted, failed));
+            } else {
+                report.push_str("\nDry-run mode. Set dry_run=false to delete.");
+            }
+        }
+
+        self.ok(id, json!({ "content": Self::text_content(report) }))
+    }
+}
+
+fn run_command_timeout(args: &[&str], dir: &Path, secs: u64) -> std::result::Result<std::process::Output, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let dir = dir.to_path_buf();
+    let args_owned: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+    std::thread::spawn(move || {
+        let _ = tx.send(std::process::Command::new(&args_owned[0])
+            .args(&args_owned[1..])
+            .current_dir(&dir)
+            .output());
+    });
+    match rx.recv_timeout(std::time::Duration::from_secs(secs)) {
+        Ok(result) => result.map_err(|e| format!("Command failed: {}", e)),
+        Err(_) => Err("Command timed out".to_string()),
+    }
+}
+
+fn dir_size(path: &Path) -> std::io::Result<u64> {
+    let mut total = 0u64;
+    if path.is_file() {
+        return Ok(path.metadata()?.len());
+    }
+    walk_size(path, 0, 3, &mut total)?;
+    Ok(total)
+}
+
+fn walk_size(path: &Path, depth: usize, max_depth: usize, total: &mut u64) -> std::io::Result<()> {
+    if depth > max_depth { return Ok(()); }
+    if path.is_dir() {
+        let mut visited = std::collections::HashSet::new();
+        walk_size_inner(path, depth, max_depth, total, &mut visited)
+    } else {
+        Ok(())
+    }
+}
+
+fn walk_size_inner(path: &Path, depth: usize, max_depth: usize, total: &mut u64, visited: &mut std::collections::HashSet<u64>) -> std::io::Result<()> {
+    if depth > max_depth { return Ok(()); }
+    if let Ok(meta) = path.metadata() {
+        #[cfg(unix)]
+        let ino = std::os::unix::fs::MetadataExt::ino(&meta);
+        #[cfg(not(unix))]
+        let ino = 0u64;
+        if ino != 0 && !visited.insert(ino) {
+            return Ok(());
+        }
+    }
+    if path.is_dir() {
+        for entry in std::fs::read_dir(path)? {
+            let e = entry?;
+            let p = e.path();
+            if p.is_symlink() { continue; }
+            if p.is_file() {
+                *total += e.metadata()?.len();
+            } else if p.is_dir() {
+                walk_size_inner(&p, depth + 1, max_depth, total, visited)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn format_size(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB"];
+    if bytes == 0 { return "0B".into(); }
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    format!("{:.1}{}", size, UNITS[unit])
+}
+
+fn find_readme(path: &Path) -> Option<std::path::PathBuf> {
+    let names = ["README.md", "Readme.md", "readme.md", "README", "LEEME.md", "README.txt"];
+    for name in &names {
+        let p = path.join(name);
+        if p.exists() { return Some(p); }
+    }
+    None
+}
+
+fn scan_configs(path: &Path) -> Vec<String> {
+    let configs = [
+        "Cargo.toml", "package.json", "pyproject.toml", "go.mod", "CMakeLists.txt",
+        "Makefile", "Dockerfile", "docker-compose.yml", "compose.yaml",
+        ".env.example", ".gitignore", ".editorconfig", "tsconfig.json",
+        "opencode.json", "opencode.jsonc", "claude-code.json", "cursor.json",
+    ];
+    let mut found = Vec::new();
+    for name in &configs {
+        if path.join(name).exists() {
+            found.push(name.to_string());
+        }
+    }
+    found
+}
+
+fn collect_entries(path: &Path, depth: usize, max_depth: usize) -> Vec<(String, usize, bool, u64)> {
+    let mut entries = Vec::new();
+    let mut visited = std::collections::HashSet::new();
+    collect_entries_inner(path, depth, max_depth, &mut entries, &mut visited);
+    entries
+}
+
+fn collect_entries_inner(path: &Path, depth: usize, max_depth: usize, entries: &mut Vec<(String, usize, bool, u64)>, visited: &mut std::collections::HashSet<u64>) {
+    if depth > max_depth || !path.is_dir() { return; }
+    if let Ok(meta) = path.metadata() {
+        #[cfg(unix)]
+        let ino = std::os::unix::fs::MetadataExt::ino(&meta);
+        #[cfg(not(unix))]
+        let ino = 0u64;
+        if ino != 0 && !visited.insert(ino) {
+            return;
+        }
+    }
+    if let Ok(readdir) = std::fs::read_dir(path) {
+        for entry in readdir.flatten() {
+            let p = entry.path();
+            if p.is_symlink() { continue; }
+            let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            if name.starts_with('.') { continue; }
+            let is_dir = p.is_dir();
+            let size = if is_dir { 0 } else { p.metadata().map(|m| m.len()).unwrap_or(0) };
+            entries.push((name.clone(), depth, is_dir, size));
+            if is_dir {
+                collect_entries_inner(&p, depth + 1, max_depth, entries, visited);
+            }
+        }
+    }
+}
+
+fn cleanup_walk(
+    path: &Path,
+    patterns: &[String],
+    dir_patterns: &[&str],
+    candidates: &mut Vec<(String, String)>,
+    total_size: &mut u64,
+    now: u64,
+    max_age: u64,
+    depth: usize,
+    max_depth: usize,
+) {
+    let mut visited = std::collections::HashSet::new();
+    cleanup_walk_inner(path, patterns, dir_patterns, candidates, total_size, now, max_age, depth, max_depth, &mut visited);
+}
+
+fn cleanup_walk_inner(
+    path: &Path,
+    patterns: &[String],
+    dir_patterns: &[&str],
+    candidates: &mut Vec<(String, String)>,
+    total_size: &mut u64,
+    now: u64,
+    max_age: u64,
+    depth: usize,
+    max_depth: usize,
+    visited: &mut std::collections::HashSet<u64>,
+) {
+    if depth > max_depth || !path.is_dir() { return; }
+    if let Ok(meta) = path.metadata() {
+        #[cfg(unix)]
+        let ino = std::os::unix::fs::MetadataExt::ino(&meta);
+        #[cfg(not(unix))]
+        let ino = 0u64;
+        if ino != 0 && !visited.insert(ino) {
+            return;
+        }
+    }
+    if let Ok(readdir) = std::fs::read_dir(path) {
+        for entry in readdir.flatten() {
+            let p = entry.path();
+            if p.is_symlink() { continue; }
+            let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            if name.starts_with('.') { continue; }
+
+            if p.is_dir() {
+                if dir_patterns.contains(&name.as_str()) {
+                    let size = dir_size(&p).unwrap_or(0);
+                    *total_size += size;
+                    candidates.push((p.to_string_lossy().to_string(), format!("{} dir", name)));
+                } else {
+                    cleanup_walk_inner(&p, patterns, dir_patterns, candidates, total_size, now, max_age, depth + 1, max_depth, visited);
+                }
+            } else {
+                let matched = patterns.iter().any(|pat| {
+                    if let Some(ext) = pat.strip_prefix('*') {
+                        name.ends_with(ext)
+                    } else {
+                        name == *pat
+                    }
+                });
+                if matched {
+                    let size = p.metadata().map(|m| m.len()).unwrap_or(0);
+                    *total_size += size;
+                    let reason = if let Ok(meta) = p.metadata() {
+                        if let Ok(modified) = meta.modified() {
+                            if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
+                                let age_secs = now.saturating_sub(duration.as_secs());
+                                if age_secs > max_age {
+                                    format!("old ({} days)", age_secs / 86400)
+                                } else {
+                                    "temp file".into()
+                                }
+                            } else { "temp file".into() }
+                        } else { "temp file".into() }
+                    } else { "temp file".into() };
+                    candidates.push((p.to_string_lossy().to_string(), reason));
+                }
+            }
         }
     }
 }

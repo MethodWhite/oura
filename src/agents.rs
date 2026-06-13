@@ -4,47 +4,52 @@ use crate::types::SecurityAuditEntry;
 
 pub struct SecurityAuditor;
 
-const DANGEROUS_PATTERNS: &[(&str, &str, &str, &str, &str)] = &[
+const DANGEROUS_PATTERNS: &[(&str, &str, &str, &str, &str, &[&str])] = &[
     ("command_injection", "critical",
-     "exec\\s*\\(\\s*['\"`]\\s*rm\\s+-rf\\s+[/~]",
-     "Dangerous rm -rf execution detected",
-     "Use safe file deletion with proper path validation"),
+     r#"(?i)(?:exec|spawn|system|popen|shell_exec)\s*\(\s*['"`][^'"`]*rm\s+[-][^'"`]*[/~]"#,
+     "Dangerous rm -rf execution detected via command execution function",
+     "Use safe file deletion with proper path validation",
+     &["js", "php", "py"]),
     ("dangerous_query", "critical",
-     "db\\.exec(?:ute)?\\s*\\(\\s*['\"`]\\s*DROP\\s+(?:TABLE|DATABASE)",
+     r#"(?i)db\.(?:exec(?:ute)?|query|run)\s*\(\s*['"`]\s*DROP\s+(?:TABLE|DATABASE)"#,
      "DROP TABLE/DATABASE query detected",
-     "Use migrations with automatic backup; never DROP in production code"),
+     "Use migrations with automatic backup; never DROP in production code",
+     &["js", "ts", "py", "go", "rs"]),
     ("dangerous_query", "high",
-     "db\\.exec(?:ute)?\\s*\\(\\s*['\"`]\\s*DELETE\\s+FROM",
-     "DELETE query without WHERE clause may delete all rows",
-     "Always specify WHERE clause or use safe migration patterns"),
+     r#"(?i)db\.(?:exec(?:ute)?|query|run)\s*\(\s*['"`]\s*DELETE\s+(?!FROM\s+\()"#,
+     "DELETE query without WHERE may delete all rows",
+     "Always specify WHERE clause or use safe migration patterns",
+     &["js", "ts", "py", "go"]),
     ("dangerous_query", "high",
-     "TRUNCATE\\s+(?:TABLE\\s+)?\\w+",
+     r#"(?i)\bTRUNCATE\s+(?:TABLE\s+)?\w+"#,
      "TRUNCATE detected - irreversible data loss",
-     "Use DELETE with condition or backup first"),
+     "Use DELETE with condition or backup first",
+     &["sql"]),
     ("unsafe_deserialization", "high",
-     "eval\\s*\\(",
-     "eval() usage - arbitrary code execution risk",
-     "Avoid eval(); use safe parsers"),
+     r#"(?<!\w)(?:eval|JSON\.parse)\s*\(\s*(?:request|req|body|data|input|userInput)"#,
+     "eval() of user input - arbitrary code execution risk",
+     "Avoid eval(); use safe parsers",
+     &["js", "ts"]),
     ("xss", "high",
-     "innerHTML\\s*=",
+     r#"(?i)(?:innerHTML|outerHTML|insertAdjacentHTML)\s*="#,
      "innerHTML assignment - XSS vulnerability",
-     "Use textContent or sanitize with DOMPurify"),
+     "Use textContent or sanitize with DOMPurify",
+     &["js", "ts", "html"]),
     ("sql_injection", "high",
-     "\\.query\\s*\\(\\s*['\"`]\\s*SELECT",
+     r#"(?i)(?:execute|query|run|exec)\s*\(\s*['"`]\s*(?:SELECT|INSERT|UPDATE|DELETE)"#,
      "Raw SQL query - possible SQL injection",
-     "Use parameterized queries or prepared statements"),
+     "Use parameterized queries or prepared statements",
+     &["js", "ts", "py", "go", "java", "php"]),
     ("insecure_crypto", "medium",
-     "crypto\\.createHash\\s*\\(\\s*['\"`]md5['\"`]",
-     "MD5 hash usage - cryptographically broken",
-     "Use SHA-256 or higher"),
-    ("insecure_crypto", "medium",
-     "crypto\\.createHash\\s*\\(\\s*['\"`]sha1['\"`]",
-     "SHA-1 hash usage - cryptographically broken",
-     "Use SHA-256 or higher"),
+     r#"(?i)(?:MD5|SHA1?)\s*(?:\.|::)(?:hash|digest|create)\s*\(|crypto\.createHash\s*\(\s*['"`](?:md5|sha1)['"`]"#,
+     "MD5/SHA-1 hash usage - cryptographically broken",
+     "Use SHA-256 or higher",
+     &["js", "ts", "py", "rs"]),
     ("path_traversal", "high",
-     "\\.\\.\\/|\\.\\.[\\\\/]",
-     "Path traversal pattern detected",
-     "Use path.resolve() with allowlist-based path validation"),
+     r#"(?i)(?:open|readFile|writeFile|unlink|rmdir)\s*\([^)]*\.\.\/"#,
+     "Path traversal pattern in file operations",
+     "Use path.resolve() with allowlist-based path validation",
+     &["js", "ts", "py", "go", "rs"]),
 ];
 
 impl SecurityAuditor {
@@ -56,6 +61,12 @@ impl SecurityAuditor {
         let mut entries = vec![];
 
         for file in files {
+            let ext = std::path::Path::new(file)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+
             let content = match fs::read_to_string(file) {
                 Ok(c) => c,
                 Err(_) => continue,
@@ -63,7 +74,28 @@ impl SecurityAuditor {
 
             let lines: Vec<&str> = content.lines().collect();
 
-            for (type_, severity, pattern, description, recommendation) in DANGEROUS_PATTERNS {
+            for (type_, severity, pattern, description, recommendation, langs) in DANGEROUS_PATTERNS {
+                // Skip pattern if its language list doesn't match the file extension
+                let ext_match = |ext: &str, langs: &[&str]| -> bool {
+                    let mapped = match ext {
+                        "js" | "jsx" | "mjs" | "cjs" => "js",
+                        "ts" | "tsx" | "mts" | "cts" => "ts",
+                        "py" | "pyw" => "py",
+                        "rs" => "rs",
+                        "go" => "go",
+                        "java" | "kt" | "kts" => "java",
+                        "php" => "php",
+                        "sql" => "sql",
+                        "html" | "htm" | "xhtml" => "html",
+                        _ => "",
+                    };
+                    mapped.is_empty() || langs.contains(&mapped)
+                };
+
+                if !ext_match(&ext, langs) {
+                    continue;
+                }
+
                 let re = match Regex::new(pattern) {
                     Ok(r) => r,
                     Err(_) => continue,

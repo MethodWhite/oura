@@ -135,7 +135,9 @@ impl Config {
                 let content = std::fs::read_to_string(&path).unwrap_or_default();
                 match toml::from_str(&content) {
                     Ok(config) => {
-                        eprintln!("[Oura] Loaded config from: {}", path.display());
+                        if std::env::var("OURA_QUIET").is_err() && std::env::var("QUIET").is_err() {
+                            eprintln!("[Oura] Loaded config from: {}", path.display());
+                        }
                         return Self::apply_env_overrides(config);
                     }
                     Err(e) => {
