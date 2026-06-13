@@ -16,7 +16,7 @@ anyhow = "1.0"
 thiserror = "1.0"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"], default-features = false }
 regex = "1"
-dirs = "5.0"
+dirs = "6.0"
 base64 = "0.22"
 async-trait = "0.1"
 tracing = "0.1"
