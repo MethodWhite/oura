@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 660" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A0A1A"/>
+      <stop offset="100%" stop-color="#0F0F2E"/>
+    </linearGradient>
+    <linearGradient id="boxGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1E1B4B"/>
+      <stop offset="100%" stop-color="#15123A"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6C5CE7"/>
+    </marker>
+  </defs>
+
+  <rect width="1100" height="660" fill="url(#bgGrad)" rx="12"/>
+
+  <text x="550" y="36" text-anchor="middle" font-size="20" font-weight="700" fill="#6C5CE7" filter="url(#glow)">Oura Architecture</text>
+
+  <!-- MCP Transport Layer -->
+  <rect x="50" y="65" width="1000" height="110" rx="8" fill="url(#boxGrad)" stroke="#6C5CE7" stroke-width="1.5"/>
+  <text x="65" y="85" font-size="10" font-weight="600" fill="#6C5CE7" letter-spacing="1">MCP TRANSPORT</text>
+
+  <rect x="80" y="98" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#6C5CE7" stroke-width="1"/>
+  <text x="180" y="120" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">MCP Protocol</text>
+  <text x="180" y="138" text-anchor="middle" font-size="9" fill="#A29BFE">JSON-RPC 2.0 / stdio</text>
+
+  <rect x="320" y="98" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#6C5CE7" stroke-width="1"/>
+  <text x="420" y="120" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Loop Tools</text>
+  <text x="420" y="138" text-anchor="middle" font-size="9" fill="#A29BFE">start / stop / iterate / status</text>
+
+  <rect x="560" y="98" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#6C5CE7" stroke-width="1"/>
+  <text x="660" y="120" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Analysis Tools</text>
+  <text x="660" y="138" text-anchor="middle" font-size="9" fill="#A29BFE">security / code / project</text>
+
+  <rect x="800" y="98" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#6C5CE7" stroke-width="1"/>
+  <text x="900" y="120" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Config Tools</text>
+  <text x="900" y="138" text-anchor="middle" font-size="9" fill="#A29BFE">configure / working_dir / version</text>
+
+  <!-- Arrows Transport → Core -->
+  <line x1="180" y1="152" x2="180" y2="228" stroke="#6C5CE7" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="420" y1="152" x2="420" y2="228" stroke="#6C5CE7" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="660" y1="152" x2="660" y2="228" stroke="#6C5CE7" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="900" y1="152" x2="900" y2="228" stroke="#6C5CE7" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Core Engine Layer -->
+  <rect x="50" y="228" width="1000" height="210" rx="8" fill="url(#boxGrad)" stroke="#00B894" stroke-width="1.5"/>
+  <text x="65" y="248" font-size="10" font-weight="600" fill="#00B894" letter-spacing="1">CORE ENGINE</text>
+
+  <!-- Row 1 -->
+  <rect x="80" y="264" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#00B894" stroke-width="1"/>
+  <text x="180" y="286" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">LoopEngine</text>
+  <text x="180" y="304" text-anchor="middle" font-size="9" fill="#55EFC4">Async loop / Convergence</text>
+
+  <rect x="320" y="264" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#00B894" stroke-width="1"/>
+  <text x="420" y="286" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Feedback</text>
+  <text x="420" y="304" text-anchor="middle" font-size="9" fill="#55EFC4">Test / Lint / Typecheck</text>
+
+  <rect x="560" y="264" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#00B894" stroke-width="1"/>
+  <text x="660" y="286" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Security Agents</text>
+  <text x="660" y="304" text-anchor="middle" font-size="9" fill="#55EFC4">Audit / Refactor / Guard</text>
+
+  <rect x="800" y="264" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#00B894" stroke-width="1"/>
+  <text x="900" y="286" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Profile</text>
+  <text x="900" y="304" text-anchor="middle" font-size="9" fill="#55EFC4">Project detection / Deps</text>
+
+  <!-- Row 2 -->
+  <rect x="80" y="340" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#00B894" stroke-width="1"/>
+  <text x="180" y="362" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">GitHub Integration</text>
+  <text x="180" y="380" text-anchor="middle" font-size="9" fill="#55EFC4">PRs / Workflows / Actions</text>
+
+  <rect x="320" y="340" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#00B894" stroke-width="1"/>
+  <text x="420" y="362" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Plugin System</text>
+  <text x="420" y="380" text-anchor="middle" font-size="9" fill="#55EFC4">Extensible hooks</text>
+
+  <rect x="560" y="340" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#00B894" stroke-width="1"/>
+  <text x="660" y="362" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Synapsis Bridge</text>
+  <text x="660" y="380" text-anchor="middle" font-size="9" fill="#55EFC4">Memory / Task orchestration</text>
+
+  <rect x="800" y="340" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#00B894" stroke-width="1"/>
+  <text x="900" y="362" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Error Handling</text>
+  <text x="900" y="380" text-anchor="middle" font-size="9" fill="#55EFC4">Typed errors / Retry</text>
+
+  <!-- Arrow Core → Infrastructure -->
+  <line x1="550" y1="438" x2="550" y2="468" stroke="#A29BFE" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="6,4"/>
+
+  <!-- Infrastructure Layer -->
+  <rect x="50" y="468" width="1000" height="120" rx="8" fill="url(#boxGrad)" stroke="#A29BFE" stroke-width="1.5"/>
+  <text x="65" y="488" font-size="10" font-weight="600" fill="#A29BFE" letter-spacing="1">INFRASTRUCTURE</text>
+
+  <rect x="80" y="504" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#A29BFE" stroke-width="1"/>
+  <text x="180" y="528" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">fs_utils</text>
+  <text x="180" y="546" text-anchor="middle" font-size="9" fill="#A29BFE">Safe paths / Cleanup</text>
+
+  <rect x="320" y="504" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#A29BFE" stroke-width="1"/>
+  <text x="420" y="528" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">EventBus</text>
+  <text x="420" y="546" text-anchor="middle" font-size="9" fill="#A29BFE">Async broadcast channel</text>
+
+  <rect x="560" y="504" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#A29BFE" stroke-width="1"/>
+  <text x="660" y="528" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Config</text>
+  <text x="660" y="546" text-anchor="middle" font-size="9" fill="#A29BFE">TOML + env vars</text>
+
+  <rect x="800" y="504" width="200" height="54" rx="6" fill="#1E1B4B" stroke="#A29BFE" stroke-width="1"/>
+  <text x="900" y="528" text-anchor="middle" font-size="12" font-weight="600" fill="#E0E0FF">Types &amp; Traits</text>
+  <text x="900" y="546" text-anchor="middle" font-size="9" fill="#A29BFE">Shared types / Contracts</text>
+</svg>
