@@ -1,6 +1,7 @@
 {
-  "mcp": {
+  "mcpServers": {
     "oura": {
+      "type": "stdio",
       "command": "/home/methodwhite/Proyectos/oura/target/release/oura"
     }
   }

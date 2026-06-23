@@ -88,6 +88,32 @@ const DANGEROUS_PATTERNS: &[DangerousPattern] = &[
     ),
 ];
 
+struct CompiledPattern {
+    type_: &'static str,
+    severity: &'static str,
+    regex: regex::Regex,
+    description: &'static str,
+    recommendation: &'static str,
+    langs: &'static [&'static str],
+}
+
+fn compiled_patterns() -> &'static [CompiledPattern] {
+    static PATTERNS: std::sync::OnceLock<Vec<CompiledPattern>> = std::sync::OnceLock::new();
+    PATTERNS.get_or_init(|| {
+        DANGEROUS_PATTERNS.iter().filter_map(|(type_, severity, pattern, description, recommendation, langs)| {
+            match regex::Regex::new(pattern) {
+                Ok(regex) => Some(CompiledPattern {
+                    type_, severity, regex, description, recommendation, langs,
+                }),
+                Err(e) => {
+                    eprintln!("[Oura] Warning: failed to compile security pattern '{}': {}", type_, e);
+                    None
+                }
+            }
+        }).collect()
+    })
+}
+
 impl SecurityAuditor {
     pub fn new() -> Self {
         Self
@@ -95,22 +121,32 @@ impl SecurityAuditor {
 
     pub fn audit(&self, files: &[String]) -> Vec<SecurityAuditEntry> {
         let mut entries = vec![];
+        let compiled = compiled_patterns();
 
         for file in files {
-            let ext = std::path::Path::new(file)
-                .extension()
+            let path = std::path::Path::new(file);
+            if let Ok(meta) = path.metadata() {
+                if meta.len() > 10_000_000 {
+                    continue;
+                }
+            }
+
+            let ext = path.extension()
                 .and_then(|e| e.to_str())
                 .unwrap_or("")
                 .to_lowercase();
 
             let content = match fs::read_to_string(file) {
                 Ok(c) => c,
-                Err(_) => continue,
+                Err(e) => {
+                    eprintln!("[Oura] SecurityAuditor: skipping unreadable file {}: {}", file, e);
+                    continue;
+                }
             };
 
             let lines: Vec<&str> = content.lines().collect();
 
-            for (type_, severity, pattern, description, recommendation, langs) in DANGEROUS_PATTERNS
+            for CompiledPattern { type_, severity, regex, description, recommendation, langs } in compiled
             {
                 // Skip pattern if its language list doesn't match the file extension
                 let ext_match = |ext: &str, langs: &[&str]| -> bool {
@@ -124,22 +160,17 @@ impl SecurityAuditor {
                         "php" => "php",
                         "sql" => "sql",
                         "html" | "htm" | "xhtml" => "html",
-                        _ => "",
+                        _ => return false,
                     };
-                    mapped.is_empty() || langs.contains(&mapped)
+                    langs.contains(&mapped)
                 };
 
                 if !ext_match(&ext, langs) {
                     continue;
                 }
 
-                let re = match Regex::new(pattern) {
-                    Ok(r) => r,
-                    Err(_) => continue,
-                };
-
                 for (i, line) in lines.iter().enumerate() {
-                    if re.is_match(line) {
+                    if regex.is_match(line) {
                         entries.push(SecurityAuditEntry {
                             type_: type_.to_string(),
                             severity: severity.to_string(),
@@ -161,7 +192,7 @@ pub struct RefactorEngine;
 
 const CLEAN_CODE_PATTERNS: &[(&str, &str, &str)] = &[
     (
-        "catch\\s*\\([^)]*\\)\\s*\\{[^}]*\\}",
+        "catch\\s*\\([^)]*\\)\\s*\\{",
         "Generic catch clause",
         "Type the error or add specific error handling",
     ),

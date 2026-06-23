@@ -14,26 +14,11 @@ pub enum OuraError {
     #[error("Background loop running, stop it first")]
     BackgroundLoopRunning,
 
-    #[error("Command execution failed: {0}")]
-    CommandFailed(String),
-
-    #[error("Command timed out after {0} seconds")]
-    CommandTimeout(u64),
-
-    #[error("Parse error: {0}")]
-    ParseError(String),
-
-    #[error("Configuration error: {0}")]
-    ConfigError(String),
-
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 
     #[error("JSON error: {0}")]
     JsonError(#[from] serde_json::Error),
-
-    #[error("HTTP error: {0}")]
-    HttpError(String),
 
     #[error("Internal error: {0}")]
     Internal(String),
@@ -46,16 +31,47 @@ impl OuraError {
             OuraError::NoActiveLoop => -32002,
             OuraError::LoopNotRunning(_) => -32003,
             OuraError::BackgroundLoopRunning => -32004,
-            OuraError::CommandFailed(_) => -32010,
-            OuraError::CommandTimeout(_) => -32011,
-            OuraError::ParseError(_) => -32700,
-            OuraError::ConfigError(_) => -32602,
             OuraError::IoError(_) => -32603,
             OuraError::JsonError(_) => -32603,
-            OuraError::HttpError(_) => -32603,
             OuraError::Internal(_) => -32603,
         }
     }
 }
 
 pub type Result<T> = std::result::Result<T, OuraError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_codes() {
+        assert_eq!(OuraError::LoopAlreadyRunning.code(), -32001);
+        assert_eq!(OuraError::NoActiveLoop.code(), -32002);
+        assert_eq!(OuraError::LoopNotRunning("test".into()).code(), -32003);
+        assert_eq!(OuraError::BackgroundLoopRunning.code(), -32004);
+        assert_eq!(OuraError::Internal("i".into()).code(), -32603);
+    }
+
+    #[test]
+    fn test_error_messages() {
+        assert_eq!(OuraError::LoopAlreadyRunning.to_string(), "Loop already running");
+        assert!(OuraError::LoopNotRunning("stopped".into()).to_string().contains("stopped"));
+        assert!(OuraError::Internal("critical".into()).to_string().contains("critical"));
+    }
+
+    #[test]
+    fn test_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let oura_err: OuraError = io_err.into();
+        assert_eq!(oura_err.code(), -32603);
+    }
+
+    #[test]
+    fn test_result_type() {
+        let ok: Result<i32> = Ok(42);
+        assert!(ok.is_ok());
+        let err: Result<i32> = Err(OuraError::NoActiveLoop);
+        assert!(err.is_err());
+    }
+}

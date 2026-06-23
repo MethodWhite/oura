@@ -126,7 +126,6 @@ impl ProjectProfile {
             "photosh",
             "adobe",
             "maya",
-            "blender",
             " Substance ",
             "houdini",
             "nuke",
@@ -297,6 +296,7 @@ fn classify(enterprise: bool, paid_tools: bool, indicators: &[String]) -> Profil
         (
             &[
                 "unreal", "unity", "godot", "bevy", "amethyst", "three.js", "babylon",
+                "game-engine",
             ],
             "game-dev",
         ),
@@ -468,8 +468,13 @@ fn classify(enterprise: bool, paid_tools: bool, indicators: &[String]) -> Profil
         *scores.entry("enterprise").or_insert(0) += 1;
     }
     if paid_tools {
+        if indicators.iter().any(|i| i.contains("datadog") || i.contains("newrelic") || i.contains("sentry")) {
+            *scores.entry("enterprise").or_insert(0) += 1;
+        }
+        if indicators.iter().any(|i| i.contains("maya") || i.contains("3ds")) {
+            *scores.entry("3d-artist").or_insert(0) += 1;
+        }
         *scores.entry("studio").or_insert(0) += 1;
-        *scores.entry("3d-artist").or_insert(0) += 1;
     }
 
     scores
@@ -487,18 +492,39 @@ fn classify(enterprise: bool, paid_tools: bool, indicators: &[String]) -> Profil
 
 fn count_cargo_deps(root: &Path) -> usize {
     if let Ok(content) = std::fs::read_to_string(root.join("Cargo.toml")) {
+        if let Ok(value) = content.parse::<toml::Value>() {
+            let mut count = 0;
+            if let Some(table) = value.as_table() {
+                for &key in &["dependencies", "dev-dependencies", "build-dependencies"] {
+                    if let Some(deps) = table.get(key).and_then(|v| v.as_table()) {
+                        count += deps.len();
+                    }
+                }
+                if let Some(target) = table.get("target").and_then(|v| v.as_table()) {
+                    for (_, cfg) in target {
+                        if let Some(t) = cfg.as_table() {
+                            for &key in &["dependencies", "dev-dependencies", "build-dependencies"] {
+                                if let Some(deps) = t.get(key).and_then(|v| v.as_table()) {
+                                    count += deps.len();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return count;
+        }
         let mut count = 0;
-        let mut in_deps = false;
         for line in content.lines() {
             let trimmed = line.trim();
             if trimmed.starts_with('[') {
-                in_deps = trimmed.starts_with("[dependencies]")
-                    || trimmed.starts_with("[dev-dependencies]")
-                    || trimmed.starts_with("[build-dependencies]");
                 continue;
             }
-            if in_deps && trimmed.contains('=') && !trimmed.starts_with('#') {
-                count += 1;
+            if trimmed.contains('=') && !trimmed.starts_with('#') {
+                let eq_count = trimmed.chars().filter(|&c| c == '=').count();
+                if eq_count == 1 {
+                    count += 1;
+                }
             }
         }
         return count;
@@ -558,7 +584,7 @@ struct LicenseCheckResult {
 fn check_cargo_licenses(root: &Path) -> LicenseCheckResult {
     let mut deps = Vec::new();
     let mut license_issues = Vec::new();
-    let version_issues = Vec::new();
+    let mut version_issues = Vec::new();
 
     let restricted = ["BUSL-1.1", "BSL-1.1", "AGPL-3.0", "SSPL-1.0", "Elastic-2.0"];
 
@@ -571,6 +597,9 @@ fn check_cargo_licenses(root: &Path) -> LicenseCheckResult {
                 if let Some(name) = current_pkg.get("name") {
                     let version: String = current_pkg.get("version").cloned().unwrap_or_default();
                     let license = current_pkg.get("license").cloned();
+                    if version.starts_with("0.") {
+                        version_issues.push(format!("{}: pre-release version ({}) - may be unstable", name, version));
+                    }
                     let info = DependencyInfo {
                         name: name.clone(),
                         version,
@@ -607,6 +636,9 @@ fn check_cargo_licenses(root: &Path) -> LicenseCheckResult {
         if let Some(name) = current_pkg.get("name") {
             let version = current_pkg.get("version").cloned().unwrap_or_default();
             let license = current_pkg.get("license").cloned();
+            if version.starts_with("0.") {
+                version_issues.push(format!("{}: pre-release version ({}) - may be unstable", name, version));
+            }
             deps.push(DependencyInfo {
                 name: name.clone(),
                 version,
@@ -690,6 +722,7 @@ fn check_node_dep_license(root: &Path, name: &str) -> Option<String> {
 }
 
 impl VerifyReport {
+    #[allow(dead_code)]
     pub fn summary(&self) -> String {
         let mut out = String::new();
         out.push_str(&format!("Profile:\n{}\n\n", self.profile.summary()));
@@ -722,12 +755,8 @@ impl VerifyReport {
 }
 
 fn read_first_n_chars(path: std::path::PathBuf, n: usize) -> std::io::Result<String> {
-    use std::io::Read;
-    let mut file = std::fs::File::open(path)?;
-    let mut buf = vec![0u8; n];
-    let bytes_read = file.read(&mut buf)?;
-    buf.truncate(bytes_read);
-    Ok(String::from_utf8_lossy(&buf).to_string())
+    let content = std::fs::read_to_string(path)?;
+    Ok(content.chars().take(n).collect())
 }
 
 #[cfg(test)]
@@ -790,7 +819,7 @@ mod tests {
     fn test_classify_game_dev() {
         let indicators = vec!["game-engine: rust".to_string()];
         let result = classify(false, false, &indicators);
-        assert_eq!(result, "indie");
+        assert_eq!(result, "game-dev");
     }
 
     #[test]
@@ -801,6 +830,16 @@ mod tests {
 
         let count = count_cargo_deps(temp.path());
         assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn test_count_cargo_deps_inline_table() {
+        let temp = TempDir::new().unwrap();
+        let cargo_toml = temp.path().join("Cargo.toml");
+        fs::write(&cargo_toml, "[dependencies]\nserde = { version = \"1.0\", features = [\"derive\"] }\ntokio = \"1.0\"").unwrap();
+
+        let count = count_cargo_deps(temp.path());
+        assert_eq!(count, 2);
     }
 
     #[test]

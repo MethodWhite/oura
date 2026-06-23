@@ -10,15 +10,22 @@ pub struct Config {
     #[serde(default)]
     pub github: GitHubConfig,
     #[serde(default)]
-    pub synapsis: SynapsisConfig,
-    #[serde(default)]
     pub logging: LoggingConfig,
+    #[serde(default)]
+    pub connector: ConnectorConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GeneralConfig {
+    #[serde(default)]
     pub data_dir: Option<String>,
+    #[serde(default = "default_profile")]
     pub profile: String,
+}
+
+fn default_profile() -> String {
+    "default".into()
 }
 
 impl Default for GeneralConfig {
@@ -30,12 +37,28 @@ impl Default for GeneralConfig {
     }
 }
 
+fn default_threshold() -> f64 { 90.0 }
+fn default_feedback_sources() -> Vec<String> { vec!["test".into(), "lint".into()] }
+fn default_max_runtime() -> u64 { 3600 }
+fn default_max_iterations() -> u32 { 20 }
+fn default_pr_prefix() -> String { "[Oura] ".into() }
+fn default_logging_level() -> String { "info".into() }
+fn default_logging_format() -> String { "text".into() }
+fn default_logging_output() -> String { "stderr".into() }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LoopEngineConfig {
+    #[serde(default = "default_max_iterations")]
     pub max_iterations: u32,
+    #[serde(default = "default_threshold")]
     pub convergence_threshold: f64,
+    #[serde(default = "default_feedback_sources")]
     pub feedback_sources: Vec<String>,
+    #[serde(default)]
     pub working_directory: Option<String>,
+    #[serde(default = "default_max_runtime")]
+    pub max_runtime_secs: u64,
 }
 
 impl Default for LoopEngineConfig {
@@ -45,21 +68,43 @@ impl Default for LoopEngineConfig {
             convergence_threshold: 90.0,
             feedback_sources: vec!["test".into(), "lint".into()],
             working_directory: None,
+            max_runtime_secs: 3600,
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GitHubConfig {
+    #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
     pub default_owner: String,
+    #[serde(default)]
     pub default_repo: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    #[serde(default)]
     pub auto_commit: bool,
+    #[serde(default)]
     pub auto_pr: bool,
+    #[serde(default = "default_pr_prefix")]
     pub pr_title_prefix: String,
+    #[serde(default)]
     pub workflows_enabled: bool,
-    pub repos: Vec<RepoConfig>,
+}
+
+#[allow(dead_code)]
+impl GitHubConfig {
+    pub fn masked_token(&self) -> Option<String> {
+        self.token.as_ref().map(|t| {
+            if t.len() > 8 {
+                format!("{}…{}", &t[..4], &t[t.len()-4..])
+            } else {
+                "********".into()
+            }
+        })
+    }
 }
 
 impl Default for GitHubConfig {
@@ -73,42 +118,18 @@ impl Default for GitHubConfig {
             auto_pr: false,
             pr_title_prefix: "[Oura] ".into(),
             workflows_enabled: true,
-            repos: vec![],
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RepoConfig {
-    pub owner: String,
-    pub repo: String,
-    pub branch: String,
-    pub base_branch: String,
-    pub auto_sync: bool,
-    pub workflows: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SynapsisConfig {
-    pub enabled: bool,
-    pub endpoint: String,
-    pub mcp_command: String,
-}
-
-impl Default for SynapsisConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            endpoint: "http://localhost:7438".into(),
-            mcp_command: "synapsis-mcp".into(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LoggingConfig {
+    #[serde(default = "default_logging_level")]
     pub level: String,
+    #[serde(default = "default_logging_format")]
     pub format: String,
+    #[serde(default = "default_logging_output")]
     pub output: String,
 }
 
@@ -122,6 +143,48 @@ impl Default for LoggingConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectorConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub transport: String,
+    #[serde(default)]
+    pub server_url: String,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub port: u16,
+    #[serde(default)]
+    pub endpoint: String,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub auto_call: bool,
+}
+
+impl Default for ConnectorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            transport: "http".into(),
+            server_url: "http://localhost:7438".into(),
+            host: "127.0.0.1".into(),
+            port: 7439,
+            endpoint: "/message".into(),
+            tools: vec![],
+            auto_call: false,
+        }
+    }
+}
+
+fn quiet_eprint(msg: &str) {
+    if std::env::var("OURA_QUIET").is_err() {
+        eprintln!("{}", msg);
+    }
+}
+
 impl Config {
     pub fn load() -> Self {
         let config_paths = vec![
@@ -132,26 +195,31 @@ impl Config {
 
         for path in config_paths.into_iter().flatten() {
             if path.exists() {
-                let content = std::fs::read_to_string(&path).unwrap_or_default();
+                let content = match std::fs::read_to_string(&path) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        quiet_eprint(&format!("[Oura] Warning: couldn't read config at {}: {}", path.display(), e));
+                        quiet_eprint("[Oura] Using default configuration");
+                        return Self::apply_env_overrides(Config::default());
+                    }
+                };
                 match toml::from_str(&content) {
                     Ok(config) => {
-                        if std::env::var("OURA_QUIET").is_err() && std::env::var("QUIET").is_err() {
-                            eprintln!("[Oura] Loaded config from: {}", path.display());
-                        }
+                        quiet_eprint(&format!("[Oura] Loaded config from: {}", path.display()));
                         return Self::apply_env_overrides(config);
                     }
                     Err(e) => {
-                        eprintln!(
+                        quiet_eprint(&format!(
                             "[Oura] Warning: failed to parse config at {}: {}",
                             path.display(),
                             e
-                        );
+                        ));
                     }
                 }
             }
         }
 
-        eprintln!("[Oura] Using default configuration");
+        quiet_eprint("[Oura] Using default configuration");
         Self::apply_env_overrides(Config::default())
     }
 
@@ -162,8 +230,10 @@ impl Config {
             }
         }
         if let Ok(val) = std::env::var("OURA_CONVERGENCE_THRESHOLD") {
-            if let Ok(n) = val.parse() {
-                config.loop_engine.convergence_threshold = n;
+            if let Ok(n) = val.parse::<f64>() {
+                if n.is_finite() && (0.0..=100.0).contains(&n) {
+                    config.loop_engine.convergence_threshold = n;
+                }
             }
         }
         if let Ok(val) = std::env::var("OURA_GITHUB_TOKEN") {
@@ -178,9 +248,6 @@ impl Config {
         if let Ok(val) = std::env::var("OURA_GITHUB_ENABLED") {
             config.github.enabled = val == "true" || val == "1";
         }
-        if let Ok(val) = std::env::var("OURA_SYNAPSIS_ENDPOINT") {
-            config.synapsis.endpoint = val;
-        }
         if let Ok(val) = std::env::var("OURA_WORKING_DIR") {
             config.loop_engine.working_directory = Some(val);
         }
@@ -194,7 +261,7 @@ impl Config {
         let config = Config::default();
         let toml_str = toml::to_string_pretty(&config)?;
         std::fs::write(path, toml_str)?;
-        eprintln!("[Oura] Default config written to: {}", path.display());
+        quiet_eprint(&format!("[Oura] Default config written to: {}", path.display()));
         Ok(())
     }
 
@@ -222,7 +289,6 @@ mod tests {
         assert_eq!(config.loop_engine.max_iterations, 20);
         assert_eq!(config.loop_engine.convergence_threshold, 90.0);
         assert!(!config.github.enabled);
-        assert!(config.synapsis.enabled);
     }
 
     #[test]
@@ -238,6 +304,7 @@ mod tests {
         assert_eq!(config.max_iterations, 20);
         assert_eq!(config.convergence_threshold, 90.0);
         assert_eq!(config.feedback_sources, vec!["test", "lint"]);
+        assert_eq!(config.max_runtime_secs, 3600);
     }
 
     #[test]
@@ -247,13 +314,6 @@ mod tests {
         assert!(!config.auto_commit);
         assert!(!config.auto_pr);
         assert_eq!(config.pr_title_prefix, "[Oura] ");
-    }
-
-    #[test]
-    fn test_synapsis_config_default() {
-        let config = SynapsisConfig::default();
-        assert!(config.enabled);
-        assert_eq!(config.endpoint, "http://localhost:7438");
     }
 
     #[test]
@@ -275,6 +335,47 @@ mod tests {
             deserialized.loop_engine.max_iterations,
             config.loop_engine.max_iterations
         );
+    }
+
+    #[test]
+    fn test_config_partial_section() {
+        let toml_str = "[loop_engine]\nmax_iterations = 5\n".to_string();
+        let config: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(config.loop_engine.max_iterations, 5);
+        assert_eq!(config.loop_engine.convergence_threshold, 90.0);
+        assert_eq!(config.loop_engine.max_runtime_secs, 3600);
+    }
+
+    #[test]
+    fn test_config_unknown_key_rejected() {
+        let toml_str = "[loop_engine]\nunknown_key = true\nmax_iterations = 5\n".to_string();
+        let result: Result<Config, _> = toml::from_str(&toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convergence_threshold_env_nan_rejected() {
+        std::env::set_var("OURA_CONVERGENCE_THRESHOLD", "nan");
+        let config = Config::apply_env_overrides(Config::default());
+        // nan should be rejected, default remains
+        assert_eq!(config.loop_engine.convergence_threshold, 90.0);
+        std::env::remove_var("OURA_CONVERGENCE_THRESHOLD");
+    }
+
+    #[test]
+    fn test_convergence_threshold_env_out_of_range_rejected() {
+        std::env::set_var("OURA_CONVERGENCE_THRESHOLD", "200");
+        let config = Config::apply_env_overrides(Config::default());
+        assert_eq!(config.loop_engine.convergence_threshold, 90.0);
+        std::env::remove_var("OURA_CONVERGENCE_THRESHOLD");
+    }
+
+    #[test]
+    fn test_convergence_threshold_env_valid() {
+        std::env::set_var("OURA_CONVERGENCE_THRESHOLD", "85.5");
+        let config = Config::apply_env_overrides(Config::default());
+        assert_eq!(config.loop_engine.convergence_threshold, 85.5);
+        std::env::remove_var("OURA_CONVERGENCE_THRESHOLD");
     }
 
     #[test]

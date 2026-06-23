@@ -1,9 +1,11 @@
 use crate::types::FeedbackEntry;
 use async_trait::async_trait;
+use std::process::Stdio;
 
 #[async_trait]
 pub trait CommandRunner: Send + Sync {
-    async fn run(&self, cmd: &str) -> Result<String, String>;
+    async fn run(&self, program: &str, args: &[&str]) -> Result<String, String>;
+    fn working_dir(&self) -> Option<&std::path::Path> { None }
 }
 
 #[async_trait]
@@ -11,36 +13,43 @@ pub trait FeedbackCollector: Send + Sync {
     async fn collect(&self) -> Vec<FeedbackEntry>;
 }
 
-#[async_trait]
-pub trait SecurityScanner: Send + Sync {
-    async fn scan(&self, files: &[String]) -> Vec<crate::types::SecurityAuditEntry>;
+pub struct DefaultCommandRunner {
+    working_dir: Option<std::path::PathBuf>,
 }
 
-#[async_trait]
-pub trait CodeAnalyzer: Send + Sync {
-    async fn analyze(&self, file: &str) -> (Vec<String>, Vec<String>);
+impl DefaultCommandRunner {
+    pub fn new() -> Self {
+        Self { working_dir: None }
+    }
+    pub fn new_with_dir(dir: std::path::PathBuf) -> Self {
+        Self { working_dir: Some(dir) }
+    }
 }
 
-#[async_trait]
-pub trait IntegrityChecker: Send + Sync {
-    async fn check(&self) -> Result<String, String>;
+impl Default for DefaultCommandRunner {
+    fn default() -> Self {
+        Self::new()
+    }
 }
-
-pub struct DefaultCommandRunner;
 
 #[async_trait]
 impl CommandRunner for DefaultCommandRunner {
-    async fn run(&self, cmd: &str) -> Result<String, String> {
-        let output = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(cmd)
-            .output()
-            .await
+    async fn run(&self, program: &str, args: &[&str]) -> Result<String, String> {
+        let mut cmd = tokio::process::Command::new(program);
+        cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
+        if let Some(ref dir) = self.working_dir {
+            cmd.current_dir(dir);
+        }
+        let output = cmd.output().await
             .map_err(|e| format!("Failed to run command: {}", e))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         Ok(format!("{}\n{}", stdout, stderr))
+    }
+
+    fn working_dir(&self) -> Option<&std::path::Path> {
+        self.working_dir.as_deref()
     }
 }
 

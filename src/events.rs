@@ -1,9 +1,6 @@
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tokio::sync::broadcast;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone)]
 pub enum OuraEvent {
     LoopStarted {
         loop_id: String,
@@ -47,6 +44,19 @@ pub enum OuraEvent {
 }
 
 impl OuraEvent {
+    pub fn name(&self) -> &'static str {
+        match self {
+            OuraEvent::LoopStarted { .. } => "loop_started",
+            OuraEvent::LoopStopped { .. } => "loop_stopped",
+            OuraEvent::LoopCompleted { .. } => "loop_completed",
+            OuraEvent::IterationStarted { .. } => "iteration_started",
+            OuraEvent::IterationCompleted { .. } => "iteration_completed",
+            OuraEvent::FeedbackCollected { .. } => "feedback_collected",
+            OuraEvent::Error { .. } => "error",
+        }
+    }
+
+    #[allow(dead_code)]
     pub fn timestamp(&self) -> &str {
         match self {
             OuraEvent::LoopStarted { timestamp, .. } => timestamp,
@@ -72,7 +82,10 @@ impl EventBus {
     }
 
     pub fn publish(&self, event: OuraEvent) {
-        let _ = self.sender.send(event);
+        if let Err(e) = self.sender.send(event) {
+            tracing::warn!("Event dropped (no active receivers)");
+            let _ = e.0;
+        }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<OuraEvent> {
@@ -101,11 +114,14 @@ impl EventLogger {
         loop {
             match self.receiver.recv().await {
                 Ok(event) => {
-                    let event_type = format!("{:?}", std::mem::discriminant(&event));
+                    let event_type = event.name();
                     tracing::info!(event_type, "{}", format_event(&event));
                 }
                 Err(broadcast::error::RecvError::Closed) => break,
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!(skipped = n, "Event receiver lagged, dropping {} messages", n);
+                    continue;
+                }
             }
         }
     }

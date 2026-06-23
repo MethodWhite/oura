@@ -2,25 +2,28 @@
 name = "oura"
 version = "0.2.0"
 description = "Oura — MCP server for intelligent iterative looping. The serpent that refines code through endless improvement cycles."
+rust-version = "1.86"
 edition = "2021"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_yaml = "0.9"
 toml = "0.8"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "process", "io-util", "io-std", "net"] }
 uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 thiserror = "1.0"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"], default-features = false }
+quinn = "0.11"
+rustls = "0.23"
+rustls-pemfile = "2"
 regex = "1"
 dirs = "5.0"
-base64 = "0.22"
 async-trait = "0.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
 
 [dev-dependencies]
 tempfile = "3.0"
