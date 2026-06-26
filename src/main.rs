@@ -2,6 +2,7 @@ mod agents;
 mod config;
 mod connector;
 mod engine;
+mod terminal_writer;
 mod error;
 mod events;
 mod feedback;
