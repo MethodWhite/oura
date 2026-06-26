@@ -1,6 +1,6 @@
 [package]
 name = "oura"
-version = "0.2.0"
+version = "0.3.0"
 description = "Oura — MCP server for intelligent iterative looping. The serpent that refines code through endless improvement cycles."
 rust-version = "1.86"
 edition = "2021"
