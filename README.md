@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/MethodWhite/oura/releases"><img src="https://img.shields.io/badge/version-0.2.0-6C5CE7?style=for-the-badge" alt="Version"></a>
   <img src="https://img.shields.io/badge/Rust-00B894?style=for-the-badge&logo=rust" alt="Rust">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-6C5CE7?style=for-the-badge" alt="License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL%201.1-6C5CE7?style=for-the-badge" alt="License"></a>
 </p>
 
 ## Características
@@ -138,11 +138,11 @@ Añade a `opencode.json` / `claude-code.json` / `cursor.json`:
 | Clippy | 0 warnings |
 | `unwrap()` en producción | 0 |
 | Lenguaje | Rust |
-| Licencia | MIT |
+| Licencia | BSL 1.1 |
 
 ## Licencia
 
-MIT — ver [LICENSE](LICENSE).
+BSL 1.1 — ver [LICENSE](LICENSE).
 
 ---
 
