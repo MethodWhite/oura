@@ -59,7 +59,7 @@ jobs:
           path: oura-*
       - name: Upload to release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: oura-*
           generate_release_notes: true
