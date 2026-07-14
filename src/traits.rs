@@ -5,6 +5,7 @@ use std::process::Stdio;
 #[async_trait]
 pub trait CommandRunner: Send + Sync {
     async fn run(&self, program: &str, args: &[&str]) -> Result<String, String>;
+    #[allow(dead_code)]
     fn working_dir(&self) -> Option<&std::path::Path> { None }
 }
 

@@ -9,10 +9,12 @@ use std::io::Write;
 use std::path::PathBuf;
 
 /// Terminal Writer for agent coordination
+#[allow(dead_code)]
 pub struct TerminalWriter {
     message_file: PathBuf,
 }
 
+#[allow(dead_code)]
 impl TerminalWriter {
     pub fn new() -> Self {
         Self {

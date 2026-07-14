@@ -40,6 +40,7 @@ impl Drop for LoopEngine {
 }
 
 impl LoopEngine {
+    #[allow(dead_code)]
     pub async fn shutdown(&mut self) {
         self.stop_flag.store(true, Ordering::SeqCst);
         self.stop_notify.notify_waiters();
