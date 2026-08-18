@@ -55,9 +55,16 @@ mod tests {
 
     #[test]
     fn test_error_messages() {
-        assert_eq!(OuraError::LoopAlreadyRunning.to_string(), "Loop already running");
-        assert!(OuraError::LoopNotRunning("stopped".into()).to_string().contains("stopped"));
-        assert!(OuraError::Internal("critical".into()).to_string().contains("critical"));
+        assert_eq!(
+            OuraError::LoopAlreadyRunning.to_string(),
+            "Loop already running"
+        );
+        assert!(OuraError::LoopNotRunning("stopped".into())
+            .to_string()
+            .contains("stopped"));
+        assert!(OuraError::Internal("critical".into())
+            .to_string()
+            .contains("critical"));
     }
 
     #[test]

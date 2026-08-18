@@ -100,17 +100,30 @@ struct CompiledPattern {
 fn compiled_patterns() -> &'static [CompiledPattern] {
     static PATTERNS: std::sync::OnceLock<Vec<CompiledPattern>> = std::sync::OnceLock::new();
     PATTERNS.get_or_init(|| {
-        DANGEROUS_PATTERNS.iter().filter_map(|(type_, severity, pattern, description, recommendation, langs)| {
-            match regex::Regex::new(pattern) {
-                Ok(regex) => Some(CompiledPattern {
-                    type_, severity, regex, description, recommendation, langs,
-                }),
-                Err(e) => {
-                    eprintln!("[Oura] Warning: failed to compile security pattern '{}': {}", type_, e);
-                    None
-                }
-            }
-        }).collect()
+        DANGEROUS_PATTERNS
+            .iter()
+            .filter_map(
+                |(type_, severity, pattern, description, recommendation, langs)| {
+                    match regex::Regex::new(pattern) {
+                        Ok(regex) => Some(CompiledPattern {
+                            type_,
+                            severity,
+                            regex,
+                            description,
+                            recommendation,
+                            langs,
+                        }),
+                        Err(e) => {
+                            eprintln!(
+                                "[Oura] Warning: failed to compile security pattern '{}': {}",
+                                type_, e
+                            );
+                            None
+                        }
+                    }
+                },
+            )
+            .collect()
     })
 }
 
@@ -131,7 +144,8 @@ impl SecurityAuditor {
                 }
             }
 
-            let ext = path.extension()
+            let ext = path
+                .extension()
                 .and_then(|e| e.to_str())
                 .unwrap_or("")
                 .to_lowercase();
@@ -139,14 +153,24 @@ impl SecurityAuditor {
             let content = match fs::read_to_string(file) {
                 Ok(c) => c,
                 Err(e) => {
-                    eprintln!("[Oura] SecurityAuditor: skipping unreadable file {}: {}", file, e);
+                    eprintln!(
+                        "[Oura] SecurityAuditor: skipping unreadable file {}: {}",
+                        file, e
+                    );
                     continue;
                 }
             };
 
             let lines: Vec<&str> = content.lines().collect();
 
-            for CompiledPattern { type_, severity, regex, description, recommendation, langs } in compiled
+            for CompiledPattern {
+                type_,
+                severity,
+                regex,
+                description,
+                recommendation,
+                langs,
+            } in compiled
             {
                 // Skip pattern if its language list doesn't match the file extension
                 let ext_match = |ext: &str, langs: &[&str]| -> bool {

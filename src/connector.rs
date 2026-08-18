@@ -42,13 +42,17 @@ impl QuicConnector {
     }
 
     pub async fn call_tool(
-        &self, host: &str, port: u16,
-        tool_name: &str, arguments: &serde_json::Value,
+        &self,
+        host: &str,
+        port: u16,
+        tool_name: &str,
+        arguments: &serde_json::Value,
     ) -> Result<String> {
-        let conn = self.connect(host, port).await
+        let conn = self
+            .connect(host, port)
+            .await
             .context("QUIC connection failed")?;
-        let (mut send, mut recv) = conn.open_bi().await
-            .context("Failed to open QUIC stream")?;
+        let (mut send, mut recv) = conn.open_bi().await.context("Failed to open QUIC stream")?;
 
         let request = serde_json::json!({
             "jsonrpc": "2.0", "id": "1", "method": "tools/call",

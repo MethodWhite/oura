@@ -2,13 +2,13 @@ mod agents;
 mod config;
 mod connector;
 mod engine;
-mod terminal_writer;
 mod error;
 mod events;
 mod feedback;
 mod fs_utils;
 mod mcp;
 mod profile;
+mod terminal_writer;
 mod traits;
 mod types;
 
@@ -27,30 +27,42 @@ fn spawn_update_checker() {
         let head_ref = match tokio::process::Command::new("git")
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .current_dir(&project)
-            .output().await
+            .output()
+            .await
         {
             Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_string(),
             Err(_) => return,
         };
-        if head_ref.is_empty() || head_ref == "HEAD" { return; }
+        if head_ref.is_empty() || head_ref == "HEAD" {
+            return;
+        }
 
         let _ = tokio::process::Command::new("git")
             .args(["fetch", "--quiet"])
             .current_dir(&project)
-            .output().await;
+            .output()
+            .await;
 
         let remote_ref = format!("HEAD..origin/{}", head_ref);
         let behind = match tokio::process::Command::new("git")
             .args(["rev-list", "--count", &remote_ref])
             .current_dir(&project)
-            .output().await
+            .output()
+            .await
         {
-            Ok(o) => String::from_utf8_lossy(&o.stdout).trim().parse::<i32>().unwrap_or(0),
+            Ok(o) => String::from_utf8_lossy(&o.stdout)
+                .trim()
+                .parse::<i32>()
+                .unwrap_or(0),
             Err(_) => 0,
         };
 
         if behind > 0 {
-            tracing::warn!(commits_behind = behind, branch = head_ref, "Update available. Run oura_update to upgrade.");
+            tracing::warn!(
+                commits_behind = behind,
+                branch = head_ref,
+                "Update available. Run oura_update to upgrade."
+            );
         }
     });
 }
@@ -100,13 +112,11 @@ async fn main() -> anyhow::Result<()> {
     Config::init().ok();
     let config = Config::load();
 
-    let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| {
-        format!("oura={}", config.logging.level)
-    });
+    let filter =
+        std::env::var("RUST_LOG").unwrap_or_else(|_| format!("oura={}", config.logging.level));
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_new(&filter)
-                .unwrap_or_else(|_| "oura=info".into()),
+            tracing_subscriber::EnvFilter::try_new(&filter).unwrap_or_else(|_| "oura=info".into()),
         )
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();

@@ -119,7 +119,11 @@ impl EventLogger {
                 }
                 Err(broadcast::error::RecvError::Closed) => break,
                 Err(broadcast::error::RecvError::Lagged(n)) => {
-                    tracing::warn!(skipped = n, "Event receiver lagged, dropping {} messages", n);
+                    tracing::warn!(
+                        skipped = n,
+                        "Event receiver lagged, dropping {} messages",
+                        n
+                    );
                     continue;
                 }
             }

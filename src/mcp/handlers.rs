@@ -17,7 +17,10 @@ impl McpServer {
         match self.engine.start(goal, manual, max_iter).await {
             Ok(state) => {
                 let mode = if manual { "manual" } else { "autonomous" };
-                let msg = format!("Loop started in {} mode: {}\nLoop ID: {}\nStatus: {}", mode, goal, state.id, state.status);
+                let msg = format!(
+                    "Loop started in {} mode: {}\nLoop ID: {}\nStatus: {}",
+                    mode, goal, state.id, state.status
+                );
                 self.ok(id, json!({ "content": Self::text_content(msg) }))
             }
             Err(e) => self.err(id, e.code(), format!("Failed to start loop: {}", e)),
@@ -27,8 +30,16 @@ impl McpServer {
     pub(super) async fn cmd_iterate(&mut self, id: Value) -> JsonRpcResponse {
         match self.engine.iterate().await {
             Ok(result) => {
-                let errors = result.feedback.iter().filter(|f| f.type_ == "error").count();
-                let warnings = result.feedback.iter().filter(|f| f.type_ == "warning").count();
+                let errors = result
+                    .feedback
+                    .iter()
+                    .filter(|f| f.type_ == "error")
+                    .count();
+                let warnings = result
+                    .feedback
+                    .iter()
+                    .filter(|f| f.type_ == "warning")
+                    .count();
 
                 let mut msg = format!(
                     "Iteration #{} - Score: {:.1}/100\nFeedback: {} errors, {} warnings",
@@ -37,8 +48,11 @@ impl McpServer {
                 for f in &result.feedback {
                     msg.push_str(&format!("\n  [{}] {}: {}", f.type_, f.source, f.message));
                 }
-                if result.status == "completed" { msg.push_str("\n\n*** CONVERGED ***"); }
-                else if result.status == "failed" { msg.push_str("\n\n*** FAILED ***"); }
+                if result.status == "completed" {
+                    msg.push_str("\n\n*** CONVERGED ***");
+                } else if result.status == "failed" {
+                    msg.push_str("\n\n*** FAILED ***");
+                }
 
                 self.ok(id, json!({ "content": Self::text_content(msg) }))
             }
@@ -62,11 +76,20 @@ impl McpServer {
                     format!("Started: {}", state.start_time),
                 ];
                 if let Some(last) = last {
-                    lines.push(format!("Last Iteration: #{} (score: {:.1}/100)", last.iteration, last.score));
+                    lines.push(format!(
+                        "Last Iteration: #{} (score: {:.1}/100)",
+                        last.iteration, last.score
+                    ));
                 }
-                self.ok(id, json!({ "content": Self::text_content(lines.join("\n")) }))
+                self.ok(
+                    id,
+                    json!({ "content": Self::text_content(lines.join("\n")) }),
+                )
             }
-            None => self.ok(id, json!({ "content": Self::text_content("No active loop".into()) })),
+            None => self.ok(
+                id,
+                json!({ "content": Self::text_content("No active loop".into()) }),
+            ),
         }
     }
 
@@ -121,23 +144,37 @@ impl McpServer {
                 Err(e) => return self.err(id, -32602, e),
             };
             if std::env::set_current_dir(&resolved).is_err() {
-                return self.err(id, -32603, format!("Failed to set working directory: {}", dir));
+                return self.err(
+                    id,
+                    -32603,
+                    format!("Failed to set working directory: {}", dir),
+                );
             }
         }
-        self.ok(id, json!({ "content": Self::text_content("Configuration updated".into()) }))
+        self.ok(
+            id,
+            json!({ "content": Self::text_content("Configuration updated".into()) }),
+        )
     }
 
     fn validate_working_dir(dir: &Path) -> Result<PathBuf, String> {
         let resolved = if dir.exists() {
-            std::fs::canonicalize(dir).map_err(|e| format!("Cannot resolve path {}: {}", dir.display(), e))?
+            std::fs::canonicalize(dir)
+                .map_err(|e| format!("Cannot resolve path {}: {}", dir.display(), e))?
         } else {
             let parent = dir.parent().unwrap_or(Path::new("/"));
             if !parent.exists() {
-                return Err(format!("Parent directory does not exist: {}", parent.display()));
+                return Err(format!(
+                    "Parent directory does not exist: {}",
+                    parent.display()
+                ));
             }
             dir.to_path_buf()
         };
-        if resolved.starts_with("/proc") || resolved.starts_with("/sys") || resolved.starts_with("/dev") {
+        if resolved.starts_with("/proc")
+            || resolved.starts_with("/sys")
+            || resolved.starts_with("/dev")
+        {
             return Err("Cannot set working directory to a system directory".into());
         }
         Ok(resolved)
@@ -154,7 +191,11 @@ impl McpServer {
             Err(e) => return self.err(id, -32602, e),
         };
         if std::env::set_current_dir(&resolved).is_err() {
-            return self.err(id, -32603, format!("Failed to set working directory: {}", dir));
+            return self.err(
+                id,
+                -32603,
+                format!("Failed to set working directory: {}", dir),
+            );
         }
         self.ok(id, json!({ "content": Self::text_content(format!("Working directory set to: {}", resolved.display())) }))
     }
@@ -164,26 +205,41 @@ impl McpServer {
             Some(p) => p,
             None => return self.err(id, -32602, "Missing required parameter: path".into()),
         };
-        self.ok(id, json!({ "content": Self::text_content(
+        self.ok(
+            id,
+            json!({ "content": Self::text_content(
             format!("Plugin loading not yet implemented in Rust version (requested path: {})", path)
-        ) }))
+        ) }),
+        )
     }
 
     pub(super) fn cmd_plugin_list(&self, id: Value) -> JsonRpcResponse {
-        self.ok(id, json!({ "content": Self::text_content("No plugins loaded".into()) }))
+        self.ok(
+            id,
+            json!({ "content": Self::text_content("No plugins loaded".into()) }),
+        )
     }
 
     pub(super) fn cmd_analyze_security(&self, id: Value, args: &Value) -> JsonRpcResponse {
-        let raw_files: Vec<String> = args["files"].as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        let raw_files: Vec<String> = args["files"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
         let mut skipped = Vec::new();
-        let files: Vec<String> = raw_files.iter().filter_map(|f| {
-            match safe_path(f) {
+        let files: Vec<String> = raw_files
+            .iter()
+            .filter_map(|f| match safe_path(f) {
                 Ok(p) => Some(p.to_string_lossy().to_string()),
-                Err(_) => { skipped.push(f.clone()); None }
-            }
-        }).collect();
+                Err(_) => {
+                    skipped.push(f.clone());
+                    None
+                }
+            })
+            .collect();
         let auditor = SecurityAuditor::new();
         let findings = auditor.audit(&files);
 
@@ -197,39 +253,69 @@ impl McpServer {
 
         let mut report = format!("Security scan complete: {} issues found\n  Critical: {}\n  High: {}\n  Medium: {}\n  Low: {}\n", findings.len(), critical, high, medium, low);
         for f in &findings {
-            report.push_str(&format!("\n[{}] {}:{} - {}\n  => {}", f.severity.to_uppercase(), f.file, f.line.map(|l| l.to_string()).unwrap_or_else(|| "?".into()), f.description, f.recommendation));
+            report.push_str(&format!(
+                "\n[{}] {}:{} - {}\n  => {}",
+                f.severity.to_uppercase(),
+                f.file,
+                f.line.map(|l| l.to_string()).unwrap_or_else(|| "?".into()),
+                f.description,
+                f.recommendation
+            ));
         }
         if !skipped.is_empty() {
-            report.push_str(&format!("\nSkipped {} files (not found): {}\n", skipped.len(), skipped.join(", ")));
+            report.push_str(&format!(
+                "\nSkipped {} files (not found): {}\n",
+                skipped.len(),
+                skipped.join(", ")
+            ));
         }
         self.ok(id, json!({ "content": Self::text_content(report) }))
     }
 
     pub(super) fn cmd_analyze_code(&self, id: Value, args: &Value) -> JsonRpcResponse {
-        let raw_files: Vec<String> = args["files"].as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        let raw_files: Vec<String> = args["files"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
         let mut skipped = Vec::new();
-        let files: Vec<String> = raw_files.iter().filter_map(|f| {
-            match safe_path(f) {
+        let files: Vec<String> = raw_files
+            .iter()
+            .filter_map(|f| match safe_path(f) {
                 Ok(p) => Some(p.to_string_lossy().to_string()),
-                Err(_) => { skipped.push(f.clone()); None }
-            }
-        }).collect();
+                Err(_) => {
+                    skipped.push(f.clone());
+                    None
+                }
+            })
+            .collect();
         let refactor = RefactorEngine::new();
         let mut report = String::from("Code Analysis Results:\n");
         for file in &files {
             let (issues, suggestions) = refactor.analyze(file);
             if !issues.is_empty() {
                 report.push_str(&format!("  {}:\n", file));
-                for issue in &issues { report.push_str(&format!("    [ISSUE] {}\n", issue)); }
-                for suggestion in &suggestions { report.push_str(&format!("    [SUGGEST] {}\n", suggestion)); }
+                for issue in &issues {
+                    report.push_str(&format!("    [ISSUE] {}\n", issue));
+                }
+                for suggestion in &suggestions {
+                    report.push_str(&format!("    [SUGGEST] {}\n", suggestion));
+                }
             }
         }
         if !skipped.is_empty() {
-            report.push_str(&format!("\nSkipped {} files (not found): {}\n", skipped.len(), skipped.join(", ")));
+            report.push_str(&format!(
+                "\nSkipped {} files (not found): {}\n",
+                skipped.len(),
+                skipped.join(", ")
+            ));
         }
-        if report == "Code Analysis Results:\n" { report = "Code analysis passed: no clean code violations detected".into(); }
+        if report == "Code Analysis Results:\n" {
+            report = "Code analysis passed: no clean code violations detected".into();
+        }
         self.ok(id, json!({ "content": Self::text_content(report) }))
     }
 
@@ -249,42 +335,78 @@ impl McpServer {
 
     pub(super) fn cmd_analyze_project(&self, id: Value, args: &Value) -> JsonRpcResponse {
         let root = args["path"].as_str().unwrap_or(".");
-        let max_depth = args["depth"].as_u64().unwrap_or(4).min(10) as usize;  // clamp to 10 max
+        let max_depth = args["depth"].as_u64().unwrap_or(4).min(10) as usize; // clamp to 10 max
         let root_path = match safe_path(root) {
             Ok(p) => p,
             Err(e) => return self.err(id, -32602, e),
         };
 
         let mut report = String::new();
-        report.push_str(&format!("[{}] ({})\n", root_path.file_name().map(|n| n.to_string_lossy()).unwrap_or_else(|| "?".into()), root_path.display()));
-        report.push_str(&format!("   Size: {}\n", fs_utils::format_size(fs_utils::dir_size(&root_path, max_depth, 10000).unwrap_or(0))));
+        report.push_str(&format!(
+            "[{}] ({})\n",
+            root_path
+                .file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_else(|| "?".into()),
+            root_path.display()
+        ));
+        report.push_str(&format!(
+            "   Size: {}\n",
+            fs_utils::format_size(fs_utils::dir_size(&root_path, max_depth, 10000).unwrap_or(0))
+        ));
 
         if let Some(rm) = fs_utils::find_readme(&root_path) {
             if let Ok(content) = std::fs::read_to_string(&rm) {
                 let preview: String = content.lines().take(8).collect::<Vec<_>>().join("\n");
-                report.push_str(&format!("   README: {} chars\n{}\n", content.len(), preview));
+                report.push_str(&format!(
+                    "   README: {} chars\n{}\n",
+                    content.len(),
+                    preview
+                ));
             }
         }
 
         let docs_dir = root_path.join("docs");
         if docs_dir.exists() && docs_dir.is_dir() {
-            report.push_str(&format!("   docs/: {} files\n", std::fs::read_dir(&docs_dir).map(|e| e.count()).unwrap_or(0)));
+            report.push_str(&format!(
+                "   docs/: {} files\n",
+                std::fs::read_dir(&docs_dir).map(|e| e.count()).unwrap_or(0)
+            ));
         }
 
         let configs = fs_utils::scan_configs(&root_path);
-        if !configs.is_empty() { report.push_str(&format!("   Config: {}\n", configs.join(", "))); }
+        if !configs.is_empty() {
+            report.push_str(&format!("   Config: {}\n", configs.join(", ")));
+        }
 
         let mut entries = fs_utils::collect_entries(&root_path, 0, max_depth, 500);
         entries.sort_by_key(|a| a.1);
         for (path_str, depth, is_dir, size) in &entries {
-            if *depth == 0 || *depth > max_depth { continue; }
+            if *depth == 0 || *depth > max_depth {
+                continue;
+            }
             let indent = "  ".repeat(*depth);
             let marker = if *is_dir { "+" } else { " " };
-            report.push_str(&format!("{}{} {}{}\n", indent, marker, path_str, if *is_dir { String::new() } else { format!(" ({})", fs_utils::format_size(*size)) }));
+            report.push_str(&format!(
+                "{}{} {}{}\n",
+                indent,
+                marker,
+                path_str,
+                if *is_dir {
+                    String::new()
+                } else {
+                    format!(" ({})", fs_utils::format_size(*size))
+                }
+            ));
         }
 
-        let large: Vec<_> = entries.iter().filter(|(_, _, is_dir, size)| !is_dir && *size > 100_000).collect();
-        if !large.is_empty() { report.push_str(&format!("\n   Large files (>100KB): {}\n", large.len())); }
+        let large: Vec<_> = entries
+            .iter()
+            .filter(|(_, _, is_dir, size)| !is_dir && *size > 100_000)
+            .collect();
+        if !large.is_empty() {
+            report.push_str(&format!("\n   Large files (>100KB): {}\n", large.len()));
+        }
 
         self.ok(id, json!({ "content": Self::text_content(report) }))
     }
@@ -299,14 +421,9 @@ impl McpServer {
         if let Ok(addr) = host.parse::<std::net::IpAddr>() {
             match addr {
                 std::net::IpAddr::V4(a) => {
-                    return a.is_loopback()
-                        || a.is_private()
-                        || a.is_link_local()
+                    return a.is_loopback() || a.is_private() || a.is_link_local()
                 }
-                std::net::IpAddr::V6(a) => {
-                    return a.is_loopback()
-                        || a.is_unicast_link_local()
-                }
+                std::net::IpAddr::V6(a) => return a.is_loopback() || a.is_unicast_link_local(),
             }
         }
         false
@@ -323,7 +440,11 @@ impl McpServer {
         };
         let host = parsed.host_str().unwrap_or("");
         if host.is_empty() || Self::is_private_ip(host) {
-            return self.err(id, -32602, "SSRF protection: requests to private/local addresses are blocked".into());
+            return self.err(
+                id,
+                -32602,
+                "SSRF protection: requests to private/local addresses are blocked".into(),
+            );
         }
         let tool_name = match args["tool_name"].as_str() {
             Some(t) => t,
@@ -346,7 +467,8 @@ impl McpServer {
 
     fn http_post(url: &str, body: &Value) -> Result<String, String> {
         let url_owned = url.to_string();
-        let body_str = serde_json::to_string(body).map_err(|e| format!("Serialization error: {}", e))?;
+        let body_str =
+            serde_json::to_string(body).map_err(|e| format!("Serialization error: {}", e))?;
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let result = reqwest::blocking::Client::builder()
@@ -354,7 +476,8 @@ impl McpServer {
                 .build()
                 .map_err(|e| format!("HTTP client build error: {}", e))
                 .and_then(|client| {
-                    client.post(&url_owned)
+                    client
+                        .post(&url_owned)
                         .header("Content-Type", "application/json")
                         .body(body_str.clone())
                         .send()
@@ -371,7 +494,10 @@ impl McpServer {
         let version = env!("CARGO_PKG_VERSION");
         let build_ts = option_env!("BUILD_TIME").unwrap_or("0");
         let git_head = option_env!("GIT_HEAD").unwrap_or("unknown");
-        let msg = format!("Oura v{} | build: {} | commit: {}", version, build_ts, git_head);
+        let msg = format!(
+            "Oura v{} | build: {} | commit: {}",
+            version, build_ts, git_head
+        );
         self.ok(id, json!({ "content": Self::text_content(msg) }))
     }
 
@@ -386,13 +512,18 @@ impl McpServer {
         let default_branch = tokio::process::Command::new("git")
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .current_dir(project_dir)
-            .output().await.ok()
+            .output()
+            .await
+            .ok()
             .and_then(|o| String::from_utf8(o.stdout).ok())
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty() && s != "HEAD")
             .unwrap_or_else(|| "main".into());
 
-        let mut report = format!("Oura v{} - checking for updates...\n", env!("CARGO_PKG_VERSION"));
+        let mut report = format!(
+            "Oura v{} - checking for updates...\n",
+            env!("CARGO_PKG_VERSION")
+        );
 
         match run_command_timeout(&["git", "fetch", "--quiet"], project_dir, 30).await {
             Ok(output) if output.status.success() => report.push_str("Git fetch OK.\n"),
@@ -410,7 +541,9 @@ impl McpServer {
         let remote_ref = format!("HEAD..origin/{}", default_branch);
         let ahead = tokio::process::Command::new("git")
             .args(["rev-list", "--count", &remote_ref])
-            .current_dir(project_dir).output().await;
+            .current_dir(project_dir)
+            .output()
+            .await;
         let commits_behind = match ahead {
             Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
             Err(_) => "?".to_string(),
@@ -418,7 +551,10 @@ impl McpServer {
         let behind_count: i32 = commits_behind.parse().unwrap_or(-1);
 
         if behind_count > 0 {
-            report.push_str(&format!("{} commits behind origin/{}\n", behind_count, default_branch));
+            report.push_str(&format!(
+                "{} commits behind origin/{}\n",
+                behind_count, default_branch
+            ));
             if apply {
                 report.push_str("Applying update...\n");
                 match run_command_timeout(&["git", "pull", "--ff-only"], project_dir, 30).await {
@@ -434,7 +570,8 @@ impl McpServer {
                     }
                 }
                 report.push_str("Running cargo build --release...\n");
-                match run_command_timeout(&["cargo", "build", "--release"], project_dir, 300).await {
+                match run_command_timeout(&["cargo", "build", "--release"], project_dir, 300).await
+                {
                     Ok(output) if output.status.success() => report.push_str("Build OK.\n"),
                     Ok(output) => {
                         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -446,7 +583,10 @@ impl McpServer {
                 report.push_str("Use oura_update with apply=true to upgrade.\n");
             }
         } else if behind_count == 0 {
-            report.push_str(&format!("Already up to date with origin/{}\n", default_branch));
+            report.push_str(&format!(
+                "Already up to date with origin/{}\n",
+                default_branch
+            ));
         } else {
             report.push_str("Could not determine update status.\n");
         }
@@ -455,14 +595,23 @@ impl McpServer {
     }
 
     pub(super) fn cmd_profile(&self, id: Value, args: &Value) -> JsonRpcResponse {
-        let path = args["path"].as_str().map(Path::new).map(|p| p.to_path_buf())
+        let path = args["path"]
+            .as_str()
+            .map(Path::new)
+            .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let profile = crate::profile::ProjectProfile::detect(&path);
-        self.ok(id, json!({ "content": Self::text_content(profile.summary()) }))
+        self.ok(
+            id,
+            json!({ "content": Self::text_content(profile.summary()) }),
+        )
     }
 
     pub(super) fn cmd_verify(&self, id: Value, args: &Value) -> JsonRpcResponse {
-        let path = args["path"].as_str().map(Path::new).map(|p| p.to_path_buf())
+        let path = args["path"]
+            .as_str()
+            .map(Path::new)
+            .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let check_licenses = args["check_licenses"].as_bool().unwrap_or(true);
         let check_versions = args["check_versions"].as_bool().unwrap_or(true);
@@ -472,12 +621,20 @@ impl McpServer {
 
         let mut report = profile.summary();
         if check_licenses && !verify.license_issues.is_empty() {
-            report.push_str(&format!("\nLicense issues:\n  {}", verify.license_issues.join("\n  ")));
+            report.push_str(&format!(
+                "\nLicense issues:\n  {}",
+                verify.license_issues.join("\n  ")
+            ));
         }
         if check_versions && !verify.version_issues.is_empty() {
-            report.push_str(&format!("\nVersion issues:\n  {}", verify.version_issues.join("\n  ")));
+            report.push_str(&format!(
+                "\nVersion issues:\n  {}",
+                verify.version_issues.join("\n  ")
+            ));
         }
-        if report.is_empty() { report = "No issues found".into(); }
+        if report.is_empty() {
+            report = "No issues found".into();
+        }
 
         self.ok(id, json!({ "content": Self::text_content(report) }))
     }
@@ -504,7 +661,9 @@ impl McpServer {
                 }
             }
             _ => {
-                let server_url = args["server_url"].as_str().unwrap_or("http://localhost:7438");
+                let server_url = args["server_url"]
+                    .as_str()
+                    .unwrap_or("http://localhost:7438");
                 let endpoint = args["endpoint"].as_str().unwrap_or("/message");
 
                 match crate::feedback::call_mcp_tool(server_url, endpoint, tool, &arguments).await {
@@ -521,13 +680,41 @@ impl McpServer {
         let confirm = args["confirm"].as_bool().unwrap_or(false);
         let older_than = args["older_than_days"].as_u64().unwrap_or(30);
         let max_depth = args["max_depth"].as_u64().unwrap_or(20) as usize;
-        let default_patterns: Vec<String> = vec!["*.tmp".into(), "*.temp".into(), "*.log".into(), "*.bak".into(), "*.swp".into(), "*.swo".into(), "*.pyc".into(), "__pycache__".into(), ".DS_Store".into(), "Thumbs.db".into()];
-        let default_dir_patterns: Vec<String> = vec!["node_modules".into(), ".next".into(), ".turbo".into(), "dist".into(), "build".into(), ".cache".into()];
-        let patterns: Vec<String> = args["patterns"].as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        let default_patterns: Vec<String> = vec![
+            "*.tmp".into(),
+            "*.temp".into(),
+            "*.log".into(),
+            "*.bak".into(),
+            "*.swp".into(),
+            "*.swo".into(),
+            "*.pyc".into(),
+            "__pycache__".into(),
+            ".DS_Store".into(),
+            "Thumbs.db".into(),
+        ];
+        let default_dir_patterns: Vec<String> = vec![
+            "node_modules".into(),
+            ".next".into(),
+            ".turbo".into(),
+            "dist".into(),
+            "build".into(),
+            ".cache".into(),
+        ];
+        let patterns: Vec<String> = args["patterns"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_else(|| default_patterns.clone());
-        let dir_patterns: Vec<String> = args["dir_patterns"].as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        let dir_patterns: Vec<String> = args["dir_patterns"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_else(|| default_dir_patterns);
 
         let root_path = match safe_path(root) {
@@ -536,11 +723,22 @@ impl McpServer {
         };
 
         if !dry_run && !confirm {
-            return self.err(id, -32602, "Deletion requires confirm=true. Run with dry_run=true first to preview.".into());
+            return self.err(
+                id,
+                -32602,
+                "Deletion requires confirm=true. Run with dry_run=true first to preview.".into(),
+            );
         }
 
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
-        let max_age = if older_than > 0 { older_than.saturating_mul(86400) } else { u64::MAX };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let max_age = if older_than > 0 {
+            older_than.saturating_mul(86400)
+        } else {
+            u64::MAX
+        };
 
         let mut ctx = CleanupContext::new(patterns, dir_patterns.to_vec(), now, max_age, max_depth);
         ctx.walk(&root_path, 0);
@@ -549,10 +747,17 @@ impl McpServer {
         let total_size = ctx.total_size();
 
         if candidates.is_empty() {
-            return self.ok(id, json!({ "content": Self::text_content("No files to clean up.".into()) }));
+            return self.ok(
+                id,
+                json!({ "content": Self::text_content("No files to clean up.".into()) }),
+            );
         }
 
-        let mut report = format!("Found {} candidates ({}):\n", candidates.len(), fs_utils::format_size(total_size));
+        let mut report = format!(
+            "Found {} candidates ({}):\n",
+            candidates.len(),
+            fs_utils::format_size(total_size)
+        );
         for (path, kind) in &candidates {
             report.push_str(&format!("  [{}] {}\n", kind, path));
         }
@@ -563,14 +768,23 @@ impl McpServer {
             for (path_str, kind) in &candidates {
                 let p = Path::new(path_str);
                 let size = p.metadata().ok().map(|m| m.len()).unwrap_or(0);
-                if kind == "dir" { std::fs::remove_dir_all(p).ok(); }
-                else { std::fs::remove_file(p).ok(); }
+                if kind == "dir" {
+                    std::fs::remove_dir_all(p).ok();
+                } else {
+                    std::fs::remove_file(p).ok();
+                }
                 deleted += 1;
                 freed += size;
             }
-            report.push_str(&format!("\nCleaned: {} items, freed {}\n", deleted, fs_utils::format_size(freed)));
+            report.push_str(&format!(
+                "\nCleaned: {} items, freed {}\n",
+                deleted,
+                fs_utils::format_size(freed)
+            ));
         } else {
-            report.push_str("\nDry-run mode. Set dry_run=false and confirm=true to actually delete.\n");
+            report.push_str(
+                "\nDry-run mode. Set dry_run=false and confirm=true to actually delete.\n",
+            );
         }
 
         self.ok(id, json!({ "content": Self::text_content(report) }))

@@ -13,32 +13,41 @@ impl McpServer {
         }))
     }
 
-    pub(super) fn handle_resource_read(&self, id: Value, params: Option<&Value>) -> JsonRpcResponse {
+    pub(super) fn handle_resource_read(
+        &self,
+        id: Value,
+        params: Option<&Value>,
+    ) -> JsonRpcResponse {
         let uri = params.and_then(|p| p["uri"].as_str()).unwrap_or("");
 
         let content = match uri {
-            "oura://state" => {
-                match self.engine.get_state() {
-                    Ok(Some(state)) => serde_json::to_string_pretty(&state).unwrap_or_else(|e| format!("Serialization error: {}", e)),
-                    Ok(None) => "No active loop".into(),
-                    Err(e) => return self.err(id, e.code(), format!("Failed to get state: {}", e)),
-                }
-            }
+            "oura://state" => match self.engine.get_state() {
+                Ok(Some(state)) => serde_json::to_string_pretty(&state)
+                    .unwrap_or_else(|e| format!("Serialization error: {}", e)),
+                Ok(None) => "No active loop".into(),
+                Err(e) => return self.err(id, e.code(), format!("Failed to get state: {}", e)),
+            },
             "oura://results" => {
                 let results = match self.engine.get_results() {
                     Ok(r) => r,
-                    Err(e) => return self.err(id, e.code(), format!("Failed to get results: {}", e)),
+                    Err(e) => {
+                        return self.err(id, e.code(), format!("Failed to get results: {}", e))
+                    }
                 };
-                serde_json::to_string_pretty(&results).unwrap_or_else(|e| format!("Serialization error: {}", e))
+                serde_json::to_string_pretty(&results)
+                    .unwrap_or_else(|e| format!("Serialization error: {}", e))
             }
             "oura://config" => {
                 let max_iter = self.engine.max_iterations().unwrap_or(20);
                 let threshold = self.engine.convergence_threshold().unwrap_or(90.0);
-                let cwd = std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                let cwd = std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
                 let config_json = json!({
                     "max_iterations": max_iter, "convergence_threshold": threshold, "working_directory": cwd,
                 });
-                serde_json::to_string_pretty(&config_json).unwrap_or_else(|e| format!("Serialization error: {}", e))
+                serde_json::to_string_pretty(&config_json)
+                    .unwrap_or_else(|e| format!("Serialization error: {}", e))
             }
             _ => return self.err(id, -32602, format!("Unknown resource: {}", uri)),
         };

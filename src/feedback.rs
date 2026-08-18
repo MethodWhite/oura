@@ -9,9 +9,7 @@ pub struct TestFeedbackCollector {
 
 impl TestFeedbackCollector {
     pub fn new(command_runner: Box<dyn CommandRunner>) -> Self {
-        Self {
-            command_runner,
-        }
+        Self { command_runner }
     }
 }
 
@@ -20,7 +18,11 @@ impl FeedbackCollector for TestFeedbackCollector {
     async fn collect(&self) -> Vec<FeedbackEntry> {
         let mut entries = vec![];
 
-        match self.command_runner.run("cargo", &["test", "--workspace"]).await {
+        match self
+            .command_runner
+            .run("cargo", &["test", "--workspace"])
+            .await
+        {
             Ok(output) => {
                 let passed = extract_number(&output, "passed");
                 let failed = extract_number(&output, "failed");
@@ -68,9 +70,7 @@ pub struct ClippyFeedbackCollector {
 
 impl ClippyFeedbackCollector {
     pub fn new(command_runner: Box<dyn CommandRunner>) -> Self {
-        Self {
-            command_runner,
-        }
+        Self { command_runner }
     }
 }
 
@@ -79,10 +79,20 @@ impl FeedbackCollector for ClippyFeedbackCollector {
     async fn collect(&self) -> Vec<FeedbackEntry> {
         let mut entries = vec![];
 
-        match self.command_runner.run("cargo", &["clippy", "--workspace"]).await {
+        match self
+            .command_runner
+            .run("cargo", &["clippy", "--workspace"])
+            .await
+        {
             Ok(output) => {
-                let warnings = output.lines().filter(|l| l.starts_with("warning:") || l.contains("warning: ")).count();
-                let errors = output.lines().filter(|l| l.starts_with("error:") || l.contains("error: ")).count();
+                let warnings = output
+                    .lines()
+                    .filter(|l| l.starts_with("warning:") || l.contains("warning: "))
+                    .count();
+                let errors = output
+                    .lines()
+                    .filter(|l| l.starts_with("error:") || l.contains("error: "))
+                    .count();
                 if warnings > 0 || errors > 0 {
                     entries.push(FeedbackEntry {
                         source: "clippy".into(),
@@ -123,7 +133,9 @@ impl ProfileFeedbackCollector {
         Self { working_dir: None }
     }
     pub fn new_with_dir(dir: std::path::PathBuf) -> Self {
-        Self { working_dir: Some(dir) }
+        Self {
+            working_dir: Some(dir),
+        }
     }
 }
 
@@ -133,10 +145,24 @@ impl Default for ProfileFeedbackCollector {
     }
 }
 
-static PROFILE_CACHE: std::sync::OnceLock<std::sync::Mutex<(String, crate::profile::ProjectProfile, crate::profile::VerifyReport)>> = std::sync::OnceLock::new();
+static PROFILE_CACHE: std::sync::OnceLock<
+    std::sync::Mutex<(
+        String,
+        crate::profile::ProjectProfile,
+        crate::profile::VerifyReport,
+    )>,
+> = std::sync::OnceLock::new();
 
-fn get_cached_profile(cwd: &std::path::Path) -> (crate::profile::ProjectProfile, crate::profile::VerifyReport) {
-    let cache = PROFILE_CACHE.get_or_init(|| std::sync::Mutex::new((String::new(), crate::profile::ProjectProfile::detect(cwd), crate::profile::verify_dependencies(cwd))));
+fn get_cached_profile(
+    cwd: &std::path::Path,
+) -> (crate::profile::ProjectProfile, crate::profile::VerifyReport) {
+    let cache = PROFILE_CACHE.get_or_init(|| {
+        std::sync::Mutex::new((
+            String::new(),
+            crate::profile::ProjectProfile::detect(cwd),
+            crate::profile::verify_dependencies(cwd),
+        ))
+    });
     if let Ok(mut guard) = cache.lock() {
         let cwd_str = cwd.to_string_lossy().to_string();
         if guard.0 != cwd_str {
@@ -146,18 +172,31 @@ fn get_cached_profile(cwd: &std::path::Path) -> (crate::profile::ProjectProfile,
         }
         return (guard.1.clone(), guard.2.clone());
     }
-    (crate::profile::ProjectProfile::detect(cwd), crate::profile::verify_dependencies(cwd))
+    (
+        crate::profile::ProjectProfile::detect(cwd),
+        crate::profile::verify_dependencies(cwd),
+    )
 }
 
 #[async_trait]
 impl FeedbackCollector for ProfileFeedbackCollector {
     async fn collect(&self) -> Vec<FeedbackEntry> {
         let mut entries = vec![];
-        let cwd = self.working_dir.clone().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let cwd = self
+            .working_dir
+            .clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let (profile_result, verify_result) = tokio::task::spawn_blocking({
             let cwd = cwd.clone();
             move || get_cached_profile(&cwd)
-        }).await.unwrap_or_else(|_| (crate::profile::ProjectProfile::detect(&cwd), crate::profile::verify_dependencies(&cwd)));
+        })
+        .await
+        .unwrap_or_else(|_| {
+            (
+                crate::profile::ProjectProfile::detect(&cwd),
+                crate::profile::verify_dependencies(&cwd),
+            )
+        });
 
         let dep_type = if profile_result.dependency_count > 50 {
             "error"
@@ -257,7 +296,12 @@ fn extract_number(output: &str, label: &str) -> u32 {
     0
 }
 
-pub async fn call_mcp_tool(server_url: &str, endpoint: &str, tool_name: &str, arguments: &serde_json::Value) -> Result<String, String> {
+pub async fn call_mcp_tool(
+    server_url: &str,
+    endpoint: &str,
+    tool_name: &str,
+    arguments: &serde_json::Value,
+) -> Result<String, String> {
     let url = format!("{}{}", server_url.trim_end_matches('/'), endpoint);
     let request_body = serde_json::json!({
         "jsonrpc": "2.0", "id": "1", "method": "tools/call",
@@ -269,14 +313,17 @@ pub async fn call_mcp_tool(server_url: &str, endpoint: &str, tool_name: &str, ar
         .build()
         .map_err(|e| format!("HTTP client build error: {}", e))?;
 
-    let resp = client.post(&url)
+    let resp = client
+        .post(&url)
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()
         .await
         .map_err(|e| format!("HTTP request failed: {}", e))?;
 
-    resp.text().await.map_err(|e| format!("HTTP read error: {}", e))
+    resp.text()
+        .await
+        .map_err(|e| format!("HTTP read error: {}", e))
 }
 
 pub struct ConnectorFeedbackCollector {
@@ -302,16 +349,20 @@ impl FeedbackCollector for ConnectorFeedbackCollector {
         for tool_name in &self.config.tools {
             let result = if self.config.transport == "quic" {
                 match crate::connector::QuicConnector::new() {
-                    Ok(conn) => conn.call_tool(
-                        &self.config.host,
-                        self.config.port,
-                        tool_name,
-                        &empty_args,
-                    ).await.map_err(|e| e.to_string()),
+                    Ok(conn) => conn
+                        .call_tool(&self.config.host, self.config.port, tool_name, &empty_args)
+                        .await
+                        .map_err(|e| e.to_string()),
                     Err(e) => Err(e.to_string()),
                 }
             } else {
-                call_mcp_tool(&self.config.server_url, &self.config.endpoint, tool_name, &empty_args).await
+                call_mcp_tool(
+                    &self.config.server_url,
+                    &self.config.endpoint,
+                    tool_name,
+                    &empty_args,
+                )
+                .await
             };
 
             match result {
@@ -320,7 +371,11 @@ impl FeedbackCollector for ConnectorFeedbackCollector {
                     entries.push(FeedbackEntry {
                         source: format!("connector:{}", tool_name),
                         type_: "info".into(),
-                        message: format!("Connector {} returned ({} chars)", tool_name, response.len()),
+                        message: format!(
+                            "Connector {} returned ({} chars)",
+                            tool_name,
+                            response.len()
+                        ),
                         details: Some(preview),
                         metric: None,
                         threshold: None,

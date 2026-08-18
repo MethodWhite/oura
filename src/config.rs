@@ -37,14 +37,30 @@ impl Default for GeneralConfig {
     }
 }
 
-fn default_threshold() -> f64 { 90.0 }
-fn default_feedback_sources() -> Vec<String> { vec!["test".into(), "lint".into()] }
-fn default_max_runtime() -> u64 { 3600 }
-fn default_max_iterations() -> u32 { 20 }
-fn default_pr_prefix() -> String { "[Oura] ".into() }
-fn default_logging_level() -> String { "info".into() }
-fn default_logging_format() -> String { "text".into() }
-fn default_logging_output() -> String { "stderr".into() }
+fn default_threshold() -> f64 {
+    90.0
+}
+fn default_feedback_sources() -> Vec<String> {
+    vec!["test".into(), "lint".into()]
+}
+fn default_max_runtime() -> u64 {
+    3600
+}
+fn default_max_iterations() -> u32 {
+    20
+}
+fn default_pr_prefix() -> String {
+    "[Oura] ".into()
+}
+fn default_logging_level() -> String {
+    "info".into()
+}
+fn default_logging_format() -> String {
+    "text".into()
+}
+fn default_logging_output() -> String {
+    "stderr".into()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -99,7 +115,7 @@ impl GitHubConfig {
     pub fn masked_token(&self) -> Option<String> {
         self.token.as_ref().map(|t| {
             if t.len() > 8 {
-                format!("{}…{}", &t[..4], &t[t.len()-4..])
+                format!("{}…{}", &t[..4], &t[t.len() - 4..])
             } else {
                 "********".into()
             }
@@ -198,7 +214,11 @@ impl Config {
                 let content = match std::fs::read_to_string(&path) {
                     Ok(c) => c,
                     Err(e) => {
-                        quiet_eprint(&format!("[Oura] Warning: couldn't read config at {}: {}", path.display(), e));
+                        quiet_eprint(&format!(
+                            "[Oura] Warning: couldn't read config at {}: {}",
+                            path.display(),
+                            e
+                        ));
                         quiet_eprint("[Oura] Using default configuration");
                         return Self::apply_env_overrides(Config::default());
                     }
@@ -261,7 +281,10 @@ impl Config {
         let config = Config::default();
         let toml_str = toml::to_string_pretty(&config)?;
         std::fs::write(path, toml_str)?;
-        quiet_eprint(&format!("[Oura] Default config written to: {}", path.display()));
+        quiet_eprint(&format!(
+            "[Oura] Default config written to: {}",
+            path.display()
+        ));
         Ok(())
     }
 

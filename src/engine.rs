@@ -1,8 +1,13 @@
 use crate::config::{ConnectorConfig, LoopEngineConfig};
 use crate::error::{OuraError, Result};
 use crate::events::{EventBus, OuraEvent};
-use crate::feedback::{ClippyFeedbackCollector, ConnectorFeedbackCollector, ProfileFeedbackCollector, TestFeedbackCollector};
-use crate::traits::{CommandRunner, CompositeFeedbackCollector, DefaultCommandRunner, FeedbackCollector};
+use crate::feedback::{
+    ClippyFeedbackCollector, ConnectorFeedbackCollector, ProfileFeedbackCollector,
+    TestFeedbackCollector,
+};
+use crate::traits::{
+    CommandRunner, CompositeFeedbackCollector, DefaultCommandRunner, FeedbackCollector,
+};
 use crate::types::*;
 use chrono::Utc;
 use std::sync::{
@@ -12,12 +17,18 @@ use std::sync::{
 use tokio::sync::Notify;
 use uuid::Uuid;
 
-fn lock_state(state: &Arc<Mutex<Option<LoopState>>>) -> Result<std::sync::MutexGuard<'_, Option<LoopState>>> {
-    state.lock().map_err(|e| OuraError::Internal(format!("Lock poisoned: {}", e)))
+fn lock_state(
+    state: &Arc<Mutex<Option<LoopState>>>,
+) -> Result<std::sync::MutexGuard<'_, Option<LoopState>>> {
+    state
+        .lock()
+        .map_err(|e| OuraError::Internal(format!("Lock poisoned: {}", e)))
 }
 
 fn lock_value<T>(mutex: &Arc<Mutex<T>>) -> Result<std::sync::MutexGuard<'_, T>> {
-    mutex.lock().map_err(|e| OuraError::Internal(format!("Lock poisoned: {}", e)))
+    mutex
+        .lock()
+        .map_err(|e| OuraError::Internal(format!("Lock poisoned: {}", e)))
 }
 
 pub struct LoopEngine {
@@ -58,7 +69,9 @@ impl LoopEngine {
         let mut composite = CompositeFeedbackCollector::new();
         let make_runner = |dir: &Option<String>| -> Box<dyn CommandRunner> {
             match dir {
-                Some(d) => Box::new(DefaultCommandRunner::new_with_dir(std::path::PathBuf::from(d))),
+                Some(d) => Box::new(DefaultCommandRunner::new_with_dir(
+                    std::path::PathBuf::from(d),
+                )),
                 None => Box::new(DefaultCommandRunner::new()),
             }
         };
@@ -77,8 +90,13 @@ impl LoopEngine {
             };
             composite.add(Box::new(collector));
         }
-        if connector_config.enabled && !connector_config.server_url.is_empty() && !connector_config.tools.is_empty() {
-            composite.add(Box::new(ConnectorFeedbackCollector::new(connector_config.clone())));
+        if connector_config.enabled
+            && !connector_config.server_url.is_empty()
+            && !connector_config.tools.is_empty()
+        {
+            composite.add(Box::new(ConnectorFeedbackCollector::new(
+                connector_config.clone(),
+            )));
         }
 
         Self {
@@ -117,7 +135,12 @@ impl LoopEngine {
         &self.event_bus
     }
 
-    pub async fn start(&mut self, goal: &str, manual: bool, max_iterations: Option<u32>) -> Result<LoopState> {
+    pub async fn start(
+        &mut self,
+        goal: &str,
+        manual: bool,
+        max_iterations: Option<u32>,
+    ) -> Result<LoopState> {
         if let Some(ref handle) = self.loop_handle {
             if !handle.is_finished() {
                 return Err(OuraError::LoopAlreadyRunning);
@@ -192,7 +215,10 @@ impl LoopEngine {
                 if stop_flag_clone.load(Ordering::SeqCst) {
                     let mut state_guard = match state_clone.lock() {
                         Ok(g) => g,
-                        Err(_) => { tracing::error!("Lock poisoned"); return; }
+                        Err(_) => {
+                            tracing::error!("Lock poisoned");
+                            return;
+                        }
                     };
                     if let Some(ref mut st) = *state_guard {
                         st.status = "stopped".into();
@@ -211,7 +237,10 @@ impl LoopEngine {
                 if max_runtime > 0 && loop_start.elapsed().as_secs() > max_runtime {
                     let mut state_guard = match state_clone.lock() {
                         Ok(g) => g,
-                        Err(_) => { tracing::error!("Lock poisoned"); return; }
+                        Err(_) => {
+                            tracing::error!("Lock poisoned");
+                            return;
+                        }
                     };
                     if let Some(ref mut st) = *state_guard {
                         st.status = "failed".into();
@@ -227,7 +256,10 @@ impl LoopEngine {
                 let iteration_num = {
                     let mut state_guard = match state_clone.lock() {
                         Ok(g) => g,
-                        Err(_) => { tracing::error!("Lock poisoned"); return; }
+                        Err(_) => {
+                            tracing::error!("Lock poisoned");
+                            return;
+                        }
                     };
                     let st = match state_guard.as_mut() {
                         Some(s) => s,
@@ -248,7 +280,10 @@ impl LoopEngine {
 
                 let threshold = match threshold_clone.lock() {
                     Ok(g) => *g,
-                    Err(_) => { tracing::error!("Lock poisoned in threshold"); return; }
+                    Err(_) => {
+                        tracing::error!("Lock poisoned in threshold");
+                        return;
+                    }
                 };
 
                 let feedback_entries = {
@@ -333,7 +368,10 @@ impl LoopEngine {
                 {
                     let mut state_guard = match state_clone.lock() {
                         Ok(g) => g,
-                        Err(_) => { tracing::error!("Lock poisoned in state update"); return; }
+                        Err(_) => {
+                            tracing::error!("Lock poisoned in state update");
+                            return;
+                        }
                     };
                     let st = match state_guard.as_mut() {
                         Some(s) => s,
@@ -407,7 +445,9 @@ impl LoopEngine {
         let feedback_entries = tokio::time::timeout(
             std::time::Duration::from_secs(600),
             self.feedback_collector.collect(),
-        ).await.unwrap_or_else(|_| {
+        )
+        .await
+        .unwrap_or_else(|_| {
             tracing::error!("Feedback collection timed out during manual iteration");
             vec![]
         });
@@ -466,7 +506,9 @@ impl LoopEngine {
     pub fn stop(&mut self) -> Result<u32> {
         self.stop_flag.store(true, Ordering::SeqCst);
         self.stop_notify.notify_waiters();
-        let mut guard = self.state.lock()
+        let mut guard = self
+            .state
+            .lock()
             .map_err(|e| OuraError::Internal(format!("Lock poisoned: {}", e)))?;
         if let Some(ref mut st) = *guard {
             st.status = "stopped".into();

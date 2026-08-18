@@ -295,7 +295,13 @@ fn classify(enterprise: bool, paid_tools: bool, indicators: &[String]) -> Profil
         ),
         (
             &[
-                "unreal", "unity", "godot", "bevy", "amethyst", "three.js", "babylon",
+                "unreal",
+                "unity",
+                "godot",
+                "bevy",
+                "amethyst",
+                "three.js",
+                "babylon",
                 "game-engine",
             ],
             "game-dev",
@@ -468,10 +474,16 @@ fn classify(enterprise: bool, paid_tools: bool, indicators: &[String]) -> Profil
         *scores.entry("enterprise").or_insert(0) += 1;
     }
     if paid_tools {
-        if indicators.iter().any(|i| i.contains("datadog") || i.contains("newrelic") || i.contains("sentry")) {
+        if indicators
+            .iter()
+            .any(|i| i.contains("datadog") || i.contains("newrelic") || i.contains("sentry"))
+        {
             *scores.entry("enterprise").or_insert(0) += 1;
         }
-        if indicators.iter().any(|i| i.contains("maya") || i.contains("3ds")) {
+        if indicators
+            .iter()
+            .any(|i| i.contains("maya") || i.contains("3ds"))
+        {
             *scores.entry("3d-artist").or_insert(0) += 1;
         }
         *scores.entry("studio").or_insert(0) += 1;
@@ -503,7 +515,8 @@ fn count_cargo_deps(root: &Path) -> usize {
                 if let Some(target) = table.get("target").and_then(|v| v.as_table()) {
                     for (_, cfg) in target {
                         if let Some(t) = cfg.as_table() {
-                            for &key in &["dependencies", "dev-dependencies", "build-dependencies"] {
+                            for &key in &["dependencies", "dev-dependencies", "build-dependencies"]
+                            {
                                 if let Some(deps) = t.get(key).and_then(|v| v.as_table()) {
                                     count += deps.len();
                                 }
@@ -598,7 +611,10 @@ fn check_cargo_licenses(root: &Path) -> LicenseCheckResult {
                     let version: String = current_pkg.get("version").cloned().unwrap_or_default();
                     let license = current_pkg.get("license").cloned();
                     if version.starts_with("0.") {
-                        version_issues.push(format!("{}: pre-release version ({}) - may be unstable", name, version));
+                        version_issues.push(format!(
+                            "{}: pre-release version ({}) - may be unstable",
+                            name, version
+                        ));
                     }
                     let info = DependencyInfo {
                         name: name.clone(),
@@ -637,7 +653,10 @@ fn check_cargo_licenses(root: &Path) -> LicenseCheckResult {
             let version = current_pkg.get("version").cloned().unwrap_or_default();
             let license = current_pkg.get("license").cloned();
             if version.starts_with("0.") {
-                version_issues.push(format!("{}: pre-release version ({}) - may be unstable", name, version));
+                version_issues.push(format!(
+                    "{}: pre-release version ({}) - may be unstable",
+                    name, version
+                ));
             }
             deps.push(DependencyInfo {
                 name: name.clone(),

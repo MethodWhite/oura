@@ -22,11 +22,18 @@ impl McpServer {
 
         loop {
             let mut line = String::new();
-            match tokio::time::timeout(std::time::Duration::from_secs(300), reader.read_line(&mut line)).await {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(300),
+                reader.read_line(&mut line),
+            )
+            .await
+            {
                 Ok(Ok(0)) => break,
                 Ok(Ok(_)) => {
                     let trimmed = line.trim();
-                    if trimmed.is_empty() { continue; }
+                    if trimmed.is_empty() {
+                        continue;
+                    }
 
                     let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
                         Ok(req) => req,
@@ -43,7 +50,9 @@ impl McpServer {
                     };
 
                     let response = self.handle_request(&request).await;
-                    if response.id.is_null() { continue; }
+                    if response.id.is_null() {
+                        continue;
+                    }
 
                     if let Ok(output) = serde_json::to_string(&response) {
                         let _ = stdout.write_all(output.as_bytes()).await;
@@ -68,7 +77,12 @@ impl McpServer {
         let id = request.id.clone();
         match request.method.as_str() {
             "initialize" => self.handle_initialize(id, request.params.as_ref()),
-            "initialized" => JsonRpcResponse { jsonrpc: "2.0".into(), id, result: None, error: None },
+            "initialized" => JsonRpcResponse {
+                jsonrpc: "2.0".into(),
+                id,
+                result: None,
+                error: None,
+            },
             "tools/list" => self.handle_tools_list(id),
             "tools/call" => self.handle_tools_call(id, request.params.as_ref()).await,
             "resources/list" => self.handle_resources_list(id),
@@ -77,19 +91,38 @@ impl McpServer {
             "prompts/get" => self.handle_prompt_get(id, request.params.as_ref()),
             "ping" => self.ok(id, json!({})),
             _ => JsonRpcResponse {
-                jsonrpc: "2.0".into(), id,
+                jsonrpc: "2.0".into(),
+                id,
                 result: None,
-                error: Some(JsonRpcError { code: -32601, message: format!("Method not found: {}", request.method), data: None }),
+                error: Some(JsonRpcError {
+                    code: -32601,
+                    message: format!("Method not found: {}", request.method),
+                    data: None,
+                }),
             },
         }
     }
 
     fn ok(&self, id: Value, result: Value) -> JsonRpcResponse {
-        JsonRpcResponse { jsonrpc: "2.0".into(), id, result: Some(result), error: None }
+        JsonRpcResponse {
+            jsonrpc: "2.0".into(),
+            id,
+            result: Some(result),
+            error: None,
+        }
     }
 
     fn err(&self, id: Value, code: i32, message: String) -> JsonRpcResponse {
-        JsonRpcResponse { jsonrpc: "2.0".into(), id, result: None, error: Some(JsonRpcError { code, message, data: None }) }
+        JsonRpcResponse {
+            jsonrpc: "2.0".into(),
+            id,
+            result: None,
+            error: Some(JsonRpcError {
+                code,
+                message,
+                data: None,
+            }),
+        }
     }
 
     fn text_content(text: String) -> Value {
@@ -99,9 +132,14 @@ impl McpServer {
     const SUPPORTED_PROTOCOLS: &'static [&'static str] = &["2024-11-05", "2025-03-26"];
 
     fn handle_initialize(&self, id: Value, params: Option<&Value>) -> JsonRpcResponse {
-        let client_version = params.and_then(|p| p["protocolVersion"].as_str()).unwrap_or("unknown");
+        let client_version = params
+            .and_then(|p| p["protocolVersion"].as_str())
+            .unwrap_or("unknown");
         if !Self::SUPPORTED_PROTOCOLS.contains(&client_version) {
-            tracing::warn!(client = client_version, "MCP client using unsupported protocol version");
+            tracing::warn!(
+                client = client_version,
+                "MCP client using unsupported protocol version"
+            );
         }
         self.ok(id, json!({
             "protocolVersion": "2024-11-05",
@@ -222,7 +260,10 @@ impl McpServer {
     }
 
     async fn handle_tools_call(&mut self, id: Value, params: Option<&Value>) -> JsonRpcResponse {
-        let params = match params { Some(p) => p, None => return self.err(id, -32602, "Missing params".into()) };
+        let params = match params {
+            Some(p) => p,
+            None => return self.err(id, -32602, "Missing params".into()),
+        };
         let name = params["name"].as_str().unwrap_or("");
         let args = params.get("arguments").cloned().unwrap_or(json!({}));
 

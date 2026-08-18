@@ -6,7 +6,9 @@ use std::process::Stdio;
 pub trait CommandRunner: Send + Sync {
     async fn run(&self, program: &str, args: &[&str]) -> Result<String, String>;
     #[allow(dead_code)]
-    fn working_dir(&self) -> Option<&std::path::Path> { None }
+    fn working_dir(&self) -> Option<&std::path::Path> {
+        None
+    }
 }
 
 #[async_trait]
@@ -23,7 +25,9 @@ impl DefaultCommandRunner {
         Self { working_dir: None }
     }
     pub fn new_with_dir(dir: std::path::PathBuf) -> Self {
-        Self { working_dir: Some(dir) }
+        Self {
+            working_dir: Some(dir),
+        }
     }
 }
 
@@ -41,7 +45,9 @@ impl CommandRunner for DefaultCommandRunner {
         if let Some(ref dir) = self.working_dir {
             cmd.current_dir(dir);
         }
-        let output = cmd.output().await
+        let output = cmd
+            .output()
+            .await
             .map_err(|e| format!("Failed to run command: {}", e))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
