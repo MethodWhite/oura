@@ -12,20 +12,15 @@
 
 <p align="center">
   <a href="https://github.com/MethodWhite/oura/releases"><img src="https://img.shields.io/badge/version-0.2.0-6C5CE7?style=for-the-badge" alt="Version"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Rust-1.86%2B-00B894?style=for-the-badge&logo=rust" alt="Rust"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-6C5CE7?style=for-the-badge" alt="License"></a>
-  <a href="#"><img src="https://img.shields.io/badge/tests-58%20passing-00B894?style=for-the-badge" alt="Tests"></a>
-  <a href="#"><img src="https://img.shields.io/badge/clippy-0%20warnings-00CEC9?style=for-the-badge" alt="Clippy"></a>
+  <img src="https://img.shields.io/badge/Rust-00B894?style=for-the-badge&logo=rust" alt="Rust">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL%201.1-6C5CE7?style=for-the-badge" alt="License"></a>
 </p>
 
 ## Características
 
-- **Loop Engine**: iteraciones automáticas con detección de convergencia
+- **Loop Engine**: iteraciones automáticas o manuales con detección de convergencia
 - **Feedback multi-fuente**: tests, lint, typecheck, custom
 - **Sub-agentes**: Security Auditor, Refactor Engine, Anti-deletion Guard, Code Optimizer
-- **Integración GitHub**: PRs, workflows, actions, auto-commit, multi-repo
-- **Plugin system**: hooks extensibles para eventos del loop
-- **Synapsis bridge**: persistencia en Synapsis memory + task orchestration
 - **Config**: TOML + env vars (`OURA_*`)
 
 ## Arquitectura
@@ -34,7 +29,7 @@
   <img src="assets/architecture.svg" alt="Oura Architecture" width="800">
 </p>
 
-Oura está compuesto por **14 módulos** organizados en capas:
+Oura está compuesto por **13 módulos** organizados en capas:
 
 | Capa | Módulos | Responsabilidad |
 |------|---------|-----------------|
@@ -63,6 +58,11 @@ export OURA_GITHUB_TOKEN=ghp_xxx
 export OURA_GITHUB_OWNER=MethodWhite
 export OURA_GITHUB_REPO=my-project
 export OURA_MAX_ITERATIONS=50
+export OURA_CONVERGENCE_THRESHOLD=90.0
+export OURA_GITHUB_ENABLED=true
+export OURA_WORKING_DIR=/path/to/project
+export OURA_CONFIG=/custom/path/config.toml
+export OURA_QUIET=1
 ```
 
 ### Config file (`~/.config/oura/config.toml`)
@@ -74,15 +74,18 @@ convergence_threshold = 90.0
 feedback_sources = ["test", "lint"]
 
 [github]
-enabled = true
+enabled = false
 default_owner = "MethodWhite"
 default_repo = "my-project"
-auto_commit = true
-auto_pr = true
+auto_commit = false
+auto_pr = false
 
-[synapsis]
-enabled = true
-endpoint = "http://localhost:7438"
+# External MCP connector — call tools on other MCP servers during iteration
+# [connector]
+# enabled = true
+# server_url = "http://localhost:7438"
+# tools = ["synapsis_mem_search"]
+# auto_call = true
 ```
 
 ## Uso con MCP
@@ -104,13 +107,14 @@ Añade a `opencode.json` / `claude-code.json` / `cursor.json`:
 
 | Tool | Descripción |
 |------|-------------|
-| `oura_start_loop` | Inicia loop de iteración con goal |
+| `oura_start_loop` | Inicia loop de iteración con goal (manual=true para modo manual con oura_iterate) |
 | `oura_iterate` | Ejecuta un paso manual |
 | `oura_loop_status` | Estado del loop actual |
 | `oura_loop_stop` | Detiene el loop |
 | `oura_results` | Resultados acumulados |
 | `oura_configure` | Actualiza configuración (maxIterations, threshold, workingDirectory) |
-| `oura_working_dir` | Cambia el directorio de trabajo |
+| `oura_working_dir` | Set the working directory for Oura commands |
+| `oura_connector` | Call a tool on an external MCP server (e.g. Synapsis). Manual or auto via `[connector]` config |
 | `oura_plugin_load` | Carga un plugin |
 | `oura_plugin_list` | Lista plugins cargados |
 | `oura_analyze_security` | Auditoría de seguridad (9 patrones) |
@@ -123,25 +127,25 @@ Añade a `opencode.json` / `claude-code.json` / `cursor.json`:
 | `oura_update` | Actualiza Oura desde git + cargo build |
 | `oura_profile` | Detecta perfil del proyecto |
 | `oura_verify` | Verifica licencias y dependencias |
-| `mcp_call` | Llama a tools de otros servidores MCP |
+| `mcp_call` | HTTP call to another MCP server (low-level; SSRF protected) |
+
 
 ## Calidad
 
 | Métrica | Valor |
 |---------|-------|
 | Tests | 58 pasando |
-| Cobertura clippy | 0 warnings |
+| Clippy | 0 warnings |
 | `unwrap()` en producción | 0 |
-| Deuda técnica corregida | ~55 issues |
-| Lenguaje | Rust 1.86+ |
-| Licencia | MIT |
+| Lenguaje | Rust |
+| Licencia | BSL 1.1 |
 
 ## Licencia
 
-MIT — ver [LICENSE](LICENSE).
+BSL 1.1 — ver [LICENSE](LICENSE).
 
 ---
 
 <p align="center">
-  Hecho con 🐍 por <a href="https://github.com/MethodWhite">MethodWhite</a>
+  Hecho con 🦀 por <a href="https://github.com/MethodWhite">MethodWhite</a>
 </p>

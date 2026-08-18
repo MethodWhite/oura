@@ -2,10 +2,7 @@
   "mcpServers": {
     "oura": {
       "type": "stdio",
-      "command": "/home/methodwhite/Proyectos/oura/target/release/oura",
-      "env": {
-        "SYNAPSIS_ENDPOINT": "http://localhost:7438"
-      }
+      "command": "/home/methodwhite/Proyectos/oura/target/release/oura"
     }
   }
 }
